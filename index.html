@@ -142,6 +142,62 @@
   .optnote { margin: 0.5rem 0 0; font-size: 0.78rem; line-height: 1.45; color: var(--text-2); }
   .hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.8rem; color: var(--text-2); min-height: 1.2em; }
 
+  /* podcast */
+  .pod-form { display: flex; gap: 0.5rem; margin: 0.2rem 0 0.2rem; }
+  .pod-form input {
+    flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--text); background: var(--fill);
+    border: 0; border-radius: 0.8rem; padding: 0.6rem 0.85rem; outline: none; -webkit-appearance: none;
+  }
+  .pod-form input::placeholder { color: var(--text-2); }
+  .pod-form input:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+  .pod-form button, .pod-back {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-size: 0.9rem; font-weight: 600;
+    padding: 0.55rem 1rem; border-radius: 0.8rem; background: var(--fill); color: var(--blue);
+    transition: transform 120ms ease-out, opacity 120ms;
+  }
+  .pod-form button:active, .pod-back:active { transform: scale(0.95); opacity: 0.7; }
+  .recent { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.7rem 0 0.2rem; scrollbar-width: none; }
+  .recent::-webkit-scrollbar { display: none; }
+  .recent button {
+    flex: none; display: flex; align-items: center; gap: 0.45rem; appearance: none; border: 0; cursor: pointer; font: inherit; font-size: 0.85rem;
+    color: var(--text); background: var(--fill); border-radius: 999px; padding: 0.3rem 0.8rem 0.3rem 0.3rem; max-width: 12rem;
+    transition: transform 100ms ease-out;
+  }
+  .recent button:active { transform: scale(0.95); }
+  .recent button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recent img { width: 1.6rem; height: 1.6rem; border-radius: 50%; object-fit: cover; background: var(--track); }
+  .plist { margin-top: 0.5rem; }
+  .prow {
+    display: flex; align-items: center; gap: 0.75rem; width: 100%; text-align: left; appearance: none; border: 0; background: none;
+    color: inherit; font: inherit; padding: 0.6rem 0; cursor: pointer; border-top: 1px solid var(--track); transition: opacity 100ms;
+  }
+  .prow:active { opacity: 0.5; }
+  .prow img { flex: none; width: 3rem; height: 3rem; border-radius: 0.7rem; object-fit: cover; background: var(--track); }
+  .prow .t { min-width: 0; }
+  .prow b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 600; font-size: 0.95rem; line-height: 1.3; }
+  .prow small { display: block; color: var(--text-2); font-size: 0.78rem; margin-top: 0.1rem; }
+  .prow.now b { color: var(--accent); }
+  .pnote { margin: 0.6rem 0 0.2rem; color: var(--text-2); font-size: 0.85rem; }
+  .pod-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.5rem; }
+  .pod-head b { font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pod-player { background: var(--fill); border-radius: 1.1rem; padding: 0.8rem; margin: 0.1rem 0 0.7rem; }
+  .pp-top { display: flex; gap: 0.7rem; align-items: center; }
+  .pp-top img { flex: none; width: 3.2rem; height: 3.2rem; border-radius: 0.8rem; object-fit: cover; background: var(--track); }
+  .pp-top .t { min-width: 0; }
+  .pp-top b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 0.92rem; line-height: 1.3; font-weight: 600; }
+  .pp-top small { color: var(--text-2); font-size: 0.78rem; }
+  .pp-bar { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem; font-size: 0.75rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .pp-bar input { flex: 1; min-width: 0; accent-color: var(--blue); }
+  .pp-ctl { display: flex; justify-content: center; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
+  .pp-ctl button {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 0.85rem; color: var(--text);
+    background: var(--track); border-radius: 999px; min-width: 3.1rem; height: 2.6rem; padding: 0 0.7rem;
+    display: grid; place-items: center; transition: transform 100ms ease-out, opacity 100ms;
+  }
+  .pp-ctl button:active { transform: scale(0.92); opacity: 0.7; }
+  .pp-ctl .big { width: 3.6rem; height: 3.6rem; padding: 0; background: var(--blue); color: #fff; }
+  .pp-ctl svg { width: 1.3rem; height: 1.3rem; fill: currentColor; }
+
   /* audio-interrupted banner */
   .fix {
     position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom));
@@ -233,6 +289,28 @@
       <div class="chips" id="chips"></div>
     </div>
     <p class="hint" id="hint"></p>
+  </section>
+
+  <section class="card panel" id="podcard">
+    <h2>Podcast</h2>
+    <div class="pod-player" id="pp" hidden>
+      <div class="pp-top"><img id="ppArt" alt=""><div class="t"><b id="ppTitle"></b><small id="ppShow"></small></div></div>
+      <div class="pp-bar"><span id="ppCur">0:00</span><input type="range" id="ppSeek" min="0" max="0" step="1" value="0" aria-label="播放進度"><span id="ppDur">0:00</span></div>
+      <div class="pp-ctl">
+        <button type="button" id="ppBack" aria-label="倒退 15 秒">−15</button>
+        <button type="button" id="ppPlay" class="big" aria-label="播放"><svg viewBox="0 0 24 24" id="ppIcon"><path d="M8 5v14l11-7z"/></svg></button>
+        <button type="button" id="ppFwd" aria-label="快轉 30 秒">+30</button>
+        <button type="button" id="ppRate" aria-label="播放速度">1×</button>
+      </div>
+    </div>
+    <form class="pod-form" id="podForm" role="search">
+      <input type="search" id="podQ" placeholder="搜尋節目，例如：好味小姐" enterkeyhint="search" autocomplete="off">
+      <button type="submit">搜尋</button>
+    </form>
+    <div class="recent" id="podRecent"></div>
+    <div id="podHead" class="pod-head" hidden><button type="button" class="pod-back" id="podBack">‹ 返回</button><b id="podShow"></b></div>
+    <div class="plist" id="podList"></div>
+    <audio id="pod" preload="none" playsinline></audio>
   </section>
 
   <section class="card panel" id="opts">
@@ -459,6 +537,7 @@
 
   let ctx = null, gen = 0, lastEnd = 0, base = { audio: 0, wall: 0 };
   const sources = new Set();
+  let windows = [];                                 // wall-clock spans in which an announcement is audible: the podcast steps aside
   const bufs = new Map();                          // clip name -> AudioBuffer
   const loading = new Map();
   let fallbackQ = [];                              // events whose clips are unavailable: spoken by tick() via browser speech
@@ -489,7 +568,7 @@
     return loading.get(name);
   }
   function stopAll() {
-    gen++; lastEnd = 0; fallbackQ = []; base = { audio: 0, wall: 0 };   // base.wall = 0 pauses the drift check
+    gen++; lastEnd = 0; fallbackQ = []; windows = []; base = { audio: 0, wall: 0 };   // base.wall = 0 pauses the drift check
     sources.forEach((s) => { s.onended = null; try { s.stop(); } catch {} });
     sources.clear();
     try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {}
@@ -570,12 +649,14 @@
       const list = e.p.clips.map((c) => bufs.get(c));
       if (list.some((b) => !b)) { addFallback([e]); return; }
       let at = Math.max(a0 + (e.at - wall) / 1000, lastEnd, a0 + 0.01);   // never overlap the previous clip
+      const startAt = at;
       list.forEach((b) => {
         const src = ctx.createBufferSource();
         src.buffer = b; src.connect(ctx.destination); src.start(at);
         at += b.duration + 0.03;
         sources.add(src); src.onended = () => sources.delete(src);
       });
+      windows.push({ from: wall + (startAt - a0) * 1000 - 400, to: wall + (at - a0) * 1000 + 300 });
       lastEnd = at;
     });
   }
@@ -701,6 +782,7 @@
     let tgt = target;
     if (st === 'idle') tgt = targetFor(now);
     const R = paused ? pausedMs / 1000 : (tgt - now) / 1000;
+    duckPod(now);
 
     if (st === 'run' && !paused && R <= 0.03) {
       buzz([120, 80, 120]);
@@ -804,6 +886,155 @@
     if (st === 'idle' && cfg.mode === 'clock' && !clockTouched) { clockToNow(); syncClock(); }
     tick();
   });
+
+  /* ---------- Podcast ----------
+     Played by this page itself, so it shares one audio session with the announcements:
+     both keep going in the background, and the podcast just steps aside while a phrase is spoken. */
+  const pod = $('pod');
+  const PKEY = 'time-announcer-pod-v1';
+  const ps = { recent: [], cur: null, rate: 1 };
+  try { Object.assign(ps, JSON.parse(localStorage.getItem(PKEY) || '{}')); } catch {}
+  const savePod = () => { try { localStorage.setItem(PKEY, JSON.stringify(ps)); } catch {} };
+  let podHeld = false;                              // true while WE paused it for an announcement
+
+  function duckPod(now) {
+    if (!pod.src) return;
+    windows = windows.filter((w) => w.to > now - 1000);
+    const inside = windows.some((w) => now >= w.from && now <= w.to);
+    if (inside && !pod.paused && !podHeld) { podHeld = true; pod.pause(); }
+    else if (!inside && podHeld) { podHeld = false; pod.play().catch(() => {}); }
+  }
+
+  const API = 'https://itunes.apple.com';
+  const art = (u, n = 200) => (u || '').replace(/\d+x\d+(bb)?\.(jpg|png)/, `${n}x${n}bb.$2`);
+  const mmss = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600); return (h ? `${h}:${p2(Math.floor(t / 60) % 60)}` : `${Math.floor(t / 60)}`) + ':' + p2(t % 60); };
+  const img = (src) => { const i = document.createElement('img'); i.alt = ''; i.loading = 'lazy'; i.src = src || ''; i.onerror = () => { i.style.visibility = 'hidden'; }; return i; };
+  const $list = $('podList');
+
+  function note(text) { $list.replaceChildren(Object.assign(document.createElement('p'), { className: 'pnote', textContent: text })); }
+  function row(src, title, sub, onClick, cls = '') {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'prow ' + cls;
+    const t = document.createElement('div'); t.className = 't';
+    const tb = document.createElement('b'); tb.textContent = title;
+    const ts = document.createElement('small'); ts.textContent = sub;
+    t.append(tb, ts); b.append(img(src), t);
+    b.onclick = onClick;
+    return b;
+  }
+
+  async function search(q) {
+    q = q.trim();
+    if (!q) return;
+    $('podHead').hidden = true; note('搜尋中…');
+    try {
+      const r = await fetch(`${API}/search?term=${encodeURIComponent(q)}&media=podcast&country=TW&limit=15`);
+      const d = await r.json();
+      if (!d.results.length) return note('找不到節目，換個關鍵字試試');
+      $list.replaceChildren(...d.results.map((x) => row(art(x.artworkUrl100), x.collectionName, x.artistName,
+        () => openShow({ id: x.collectionId, name: x.collectionName, art: art(x.artworkUrl100) }))));
+    } catch { note('搜尋失敗，請確認網路後再試'); }
+  }
+
+  async function openShow(show) {
+    $('podHead').hidden = false; $('podShow').textContent = show.name;
+    note('載入單集…');
+    try {
+      const r = await fetch(`${API}/lookup?id=${show.id}&entity=podcastEpisode&limit=40&country=TW`);
+      const d = await r.json();
+      const eps = d.results.filter((x) => x.kind === 'podcast-episode' && x.episodeUrl);
+      if (!eps.length) return note('這個節目沒有可以播放的單集');
+      $list.replaceChildren(...eps.map((e) => {
+        const date = new Date(e.releaseDate);
+        const meta = `${date.getMonth() + 1}/${date.getDate()}` + (e.trackTimeMillis ? ` · ${Math.round(e.trackTimeMillis / 60000)} 分` : '');
+        const ep = { title: e.trackName, url: e.episodeUrl, art: art(e.artworkUrl160 || show.art) };
+        return row(ep.art || show.art, e.trackName, meta, () => playEpisode(show, ep, 0),
+                   ps.cur && ps.cur.ep.url === ep.url ? 'now' : '');
+      }));
+    } catch { note('載入失敗，請確認網路後再試'); }
+  }
+  $('podBack').onclick = () => { $('podHead').hidden = true; $list.replaceChildren(); };
+  $('podForm').onsubmit = (e) => { e.preventDefault(); search($('podQ').value); $('podQ').blur(); };
+
+  function renderRecent() {
+    $('podRecent').replaceChildren(...ps.recent.map((sh) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const sp = document.createElement('span'); sp.textContent = sh.name;
+      b.append(img(sh.art), sp);
+      b.onclick = () => openShow(sh);
+      return b;
+    }));
+  }
+
+  function playEpisode(show, ep, pos) {
+    unlockAudio();                                  // also warms the audio context inside the tap
+    ps.cur = { show, ep, pos };
+    ps.recent = [show, ...ps.recent.filter((x) => x.id !== show.id)].slice(0, 6);
+    savePod(); renderRecent();
+    podHeld = false;
+    pod.src = ep.url; pod.playbackRate = ps.rate;
+    pod.onloadedmetadata = () => { if (pos) pod.currentTime = pos; pod.onloadedmetadata = null; };
+    pod.play().catch(() => {});
+    showPlayer();
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: ep.title, artist: show.name,
+          artwork: [{ src: art(ep.art || show.art, 512), sizes: '512x512' }] });
+      } catch {}
+    }
+  }
+  function restorePlayer() {                        // last episode comes back paused, at its position
+    if (!ps.cur) return;
+    pod.src = ps.cur.ep.url; pod.playbackRate = ps.rate;
+    pod.onloadedmetadata = () => { if (ps.cur.pos) pod.currentTime = ps.cur.pos; pod.onloadedmetadata = null; };
+    showPlayer();
+  }
+  function showPlayer() {
+    $('pp').hidden = false;
+    $('ppArt').src = ps.cur.ep.art || ps.cur.show.art || '';
+    $('ppTitle').textContent = ps.cur.ep.title;
+    $('ppShow').textContent = ps.cur.show.name;
+    $('ppRate').textContent = ps.rate + '×';
+    syncPlayer();
+  }
+
+  const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
+  let seeking = false, lastSave = 0;
+  function syncPlayer() {
+    $('ppIcon').innerHTML = (pod.paused && !podHeld) ? PLAY : PAUSE;
+    $('ppPlay').setAttribute('aria-label', pod.paused && !podHeld ? '播放' : '暫停');
+    const d = isFinite(pod.duration) ? pod.duration : 0;
+    $('ppSeek').max = d || 0; $('ppSeek').disabled = !d;
+    if (!seeking) { $('ppSeek').value = pod.currentTime || 0; setText($('ppCur'), mmss(pod.currentTime)); }
+    setText($('ppDur'), d ? mmss(d) : '--:--');
+  }
+  ['timeupdate', 'play', 'pause', 'durationchange', 'loadedmetadata', 'ended'].forEach((ev) => pod.addEventListener(ev, () => {
+    syncPlayer();
+    if (ps.cur && (ev !== 'timeupdate' || Date.now() - lastSave > 5000)) { ps.cur.pos = pod.currentTime; lastSave = Date.now(); savePod(); }
+  }));
+  $('ppPlay').onclick = () => {
+    if (!ps.cur) return;
+    if (podHeld) { podHeld = false; return; }       // pressed while an announcement was speaking: stay paused
+    unlockAudio();
+    if (pod.paused) pod.play().catch(() => {}); else pod.pause();
+  };
+  $('ppBack').onclick = () => { pod.currentTime = Math.max(0, pod.currentTime - 15); };
+  $('ppFwd').onclick = () => { pod.currentTime = Math.min(pod.duration || Infinity, pod.currentTime + 30); };
+  $('ppRate').onclick = () => {
+    const rates = [1, 1.25, 1.5, 2];
+    ps.rate = rates[(rates.indexOf(ps.rate) + 1) % rates.length] || 1;
+    pod.playbackRate = ps.rate; $('ppRate').textContent = ps.rate + '×'; savePod();
+  };
+  $('ppSeek').addEventListener('input', () => { seeking = true; setText($('ppCur'), mmss($('ppSeek').value)); });
+  $('ppSeek').addEventListener('change', () => { pod.currentTime = Number($('ppSeek').value); seeking = false; });
+  if ('mediaSession' in navigator) {
+    const h = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch {} };
+    h('play', () => pod.play()); h('pause', () => pod.pause());
+    h('seekbackward', () => { pod.currentTime = Math.max(0, pod.currentTime - 15); });
+    h('seekforward', () => { pod.currentTime += 30; });
+  }
+  renderRecent(); restorePlayer();
 
   /* ---------- Init ---------- */
   renderOptions();
