@@ -3,7 +3,7 @@ const CACHE = 'announcer-v1';
 const range = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1));
 const clips = [
   ...range(60, (i) => `audio/n${i}.mp3`), 'audio/timeup.mp3',
-  ...['m', 's', 'mm', 'om', 'os'].flatMap((k) => range(59, (i) => `audio/${k}${i}.mp3`)),
+  ...['m', 's', 'mm', 'om', 'os', 'ss'].flatMap((k) => range(59, (i) => `audio/${k}${i}.mp3`)),
   ...['h', 'oh'].flatMap((k) => range(24, (i) => `audio/${k}${i}.mp3`)),
 ];
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/apple-touch-icon.png',

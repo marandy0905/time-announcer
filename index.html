@@ -133,6 +133,44 @@
   .opt.sel { color: var(--text); font-weight: 600; }
   .hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.8rem; color: var(--text-2); min-height: 1.2em; }
 
+  /* disclosure */
+  .disclose {
+    appearance: none; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0;
+  }
+  .disclose .label { margin: 0; display: block; }
+  .disclose .label b { display: block; }
+  .disclose:active .chev { transform: scale(0.85); }
+  .chev {
+    flex: none; width: 0.6rem; height: 0.6rem; border-right: 2px solid var(--text-2); border-bottom: 2px solid var(--text-2);
+    transform: rotate(45deg); transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); margin-right: 0.3rem;
+  }
+  .open > .disclose .chev { transform: rotate(225deg); }
+  .collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.4s cubic-bezier(0.32, 0.72, 0, 1); }
+  .open > .collapse { grid-template-rows: 1fr; }
+  .collapse-inner { overflow: hidden; min-height: 0; }
+  .sub { padding-top: 0.9rem; }
+  .sub .label b { font-weight: 500; font-size: 0.88rem; }
+
+  /* duration buttons */
+  .dur-total { display: flex; align-items: center; justify-content: space-between; padding: 0.2rem 0.1rem 0.7rem; }
+  .dur-total b { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .dur-total b.empty { color: var(--text-2); font-weight: 500; font-size: 1.05rem; }
+  .clear {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-size: 0.9rem; font-weight: 600;
+    padding: 0.4rem 0.95rem; border-radius: 999px; background: var(--fill); color: var(--accent);
+    transition: transform 120ms ease-out, opacity 120ms ease-out;
+  }
+  .clear:active { transform: scale(0.95); opacity: 0.7; }
+  .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+  .chip {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 0.95rem;
+    padding: 0.8rem 0; border-radius: 0.9rem; background: var(--fill); color: var(--text);
+    transition: transform 100ms ease-out, background-color 150ms; font-variant-numeric: tabular-nums;
+  }
+  .chip:active { transform: scale(0.92); background: color-mix(in srgb, var(--blue) 35%, var(--fill)); }
+  .chip:focus-visible, .clear:focus-visible, .disclose:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+
   @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; animation: none !important; } }
 </style>
 </head>
@@ -167,7 +205,10 @@
       <button type="button" data-v="dur">倒數多久</button>
     </div>
     <div class="wheel" id="wClock"></div>
-    <div class="wheel" id="wDur" hidden></div>
+    <div id="durBox" hidden>
+      <div class="dur-total"><b id="durTotal" class="empty">尚未設定</b><button type="button" class="clear" id="durClear">清除</button></div>
+      <div class="chips" id="chips"></div>
+    </div>
     <p class="hint" id="hint"></p>
   </section>
 
@@ -189,79 +230,136 @@
   els.bar.style.strokeDasharray = C;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const p2 = (n) => String(n).padStart(2, '0');
+  const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
 
   /* ---------- Settings ---------- */
-  const KEY = 'time-announcer-v1';
-  const now0 = new Date(Date.now() + 30 * 60000);
+  const KEY = 'time-announcer-v2';
   const cfg = {
     mode: 'clock',
-    clock: [now0.getHours(), Math.ceil(now0.getMinutes() / 5) * 5 % 60],
-    dur: [0, 10, 0],
     sec: 10, min: 60, mid: 600, hour: 1800,   // report interval per remaining-time range, in seconds (0 = off)
     count: 10,                                 // per-second countdown starts at N seconds left (0 = off)
     cont: 'say',                               // after the target: stop | run | say
     overIv: 60,                                // seconds between 「超過…」 reports
+    mix: 'mix',                                // mix: play on top of music/podcasts | solo: take over audio
   };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
 
-  const OPTIONS = [
-    { key: 'sec',  title: '剩餘不到 1 分鐘', sub: '每隔多久報時（秒）',
-      opts: [[0, '關閉'], [5, '5 秒'], [10, '10 秒'], [15, '15 秒'], [30, '30 秒']] },
-    { key: 'min',  title: '剩餘 1–10 分鐘', sub: '每隔多久報時',
-      opts: [[0, '關閉'], [60, '1 分'], [120, '2 分'], [300, '5 分']] },
-    { key: 'mid',  title: '剩餘 10–60 分鐘', sub: '每隔多久報時',
-      opts: [[0, '關閉'], [300, '5 分'], [600, '10 分'], [900, '15 分'], [1800, '30 分']] },
-    { key: 'hour', title: '剩餘超過 1 小時', sub: '每隔多久報時',
-      opts: [[0, '關閉'], [900, '15 分'], [1800, '30 分'], [3600, '1小時'], [7200, '2小時']] },
-    { key: 'count', title: '逐秒倒數', sub: '剩下幾秒時開始唸',
-      opts: [[0, '關閉'], [3, '3 秒'], [5, '5 秒'], [10, '10 秒'], [15, '15 秒'], [30, '30 秒']] },
-    { key: 'cont', title: '時間到之後', sub: '要不要繼續',
-      opts: [['stop', '停止'], ['run', '只計時'], ['say', '計時並報時']] },
-    { key: 'overIv', title: '「超過」報時間隔', sub: '時間到之後每隔多久報時', when: () => cfg.cont === 'say',
-      opts: [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [300, '5 分'], [600, '10 分']] },
-  ];
+  // Not persisted: the clock picker starts at "now", the duration starts empty.
+  let clockPick = [0, 0], clockTouched = false;
+  let durTotal = 0;
+  const MAX_DUR = 24 * 3600;
+  function clockToNow() {
+    const d = new Date();
+    clockPick = [d.getHours(), d.getMinutes()];
+  }
+  clockToNow();
 
-  function segment(host, opts, current, onPick) {
+  /* ---------- Option groups ---------- */
+  const O = {
+    sec:  { title: '剩餘不到 1 分鐘', opts: [[0, '關閉'], [5, '5 秒'], [10, '10 秒'], [15, '15 秒'], [30, '30 秒']] },
+    min:  { title: '剩餘 1–10 分鐘', opts: [[0, '關閉'], [60, '1 分'], [120, '2 分'], [300, '5 分']] },
+    mid:  { title: '剩餘 10–60 分鐘', opts: [[0, '關閉'], [300, '5 分'], [600, '10 分'], [900, '15 分'], [1800, '30 分']] },
+    hour: { title: '剩餘超過 1 小時', opts: [[0, '關閉'], [900, '15 分'], [1800, '30 分'], [3600, '1小時'], [7200, '2小時']] },
+    count: { title: '逐秒倒數', sub: '剩下幾秒時開始唸',
+      opts: [[0, '關閉'], [3, '3 秒'], [5, '5 秒'], [10, '10 秒'], [15, '15 秒'], [30, '30 秒']] },
+    cont: { title: '時間到之後', sub: '要不要繼續',
+      opts: [['stop', '停止'], ['run', '只計時'], ['say', '計時並報時']] },
+    overIv: { title: '「超過」報時間隔', sub: '時間到之後每隔多久報時', when: () => cfg.cont === 'say',
+      opts: [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [300, '5 分'], [600, '10 分']] },
+    mix: { title: '與音樂同時播放', sub: '縮小後沒聲音時改用獨佔',
+      opts: [['mix', '混音'], ['solo', '獨佔']] },
+  };
+  const label = (k) => (O[k].opts.find(([v]) => v === cfg[k]) || [0, ''])[1];
+
+  function segment(host, key) {
+    const o = O[key];
     host.className = 'seg'; host.setAttribute('role', 'group');
-    host.replaceChildren(...opts.map(([v, label]) => {
+    host.replaceChildren(...o.opts.map(([v, text]) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.textContent = label; b.dataset.v = v;
-      b.setAttribute('aria-pressed', String(String(v) === String(current)));
-      b.onclick = () => onPick(v);
+      b.type = 'button'; b.textContent = text;
+      b.setAttribute('aria-pressed', String(v === cfg[key]));
+      b.onclick = () => { cfg[key] = v; save(); if (key === 'mix') applyAudioSession(); renderOptions(); };
       return b;
     }));
   }
-  const groups = OPTIONS.map((o) => {
+  function group(key) {
     const g = document.createElement('div');
     g.className = 'group';
-    g.innerHTML = '<div class="label"><b></b><small></small></div><div></div>';
-    g.querySelector('b').textContent = o.title;
-    g.querySelector('small').textContent = o.sub;
-    $('optList').append(g);
-    return { o, g, seg: g.lastElementChild };
-  });
-  function renderOptions() {
-    groups.forEach(({ o, g, seg }) => {
-      g.hidden = o.when ? !o.when() : false;
-      segment(seg, o.opts, cfg[o.key], (v) => {
-        cfg[o.key] = typeof o.opts[0][0] === 'number' ? Number(v) : v;
-        save(); renderOptions();
-      });
-    });
+    g.innerHTML = '<div class="label"><b></b><small></small></div><div class="segwrap"></div>';
+    g.querySelector('b').textContent = O[key].title;
+    g.querySelector('small').textContent = O[key].sub || '';
+    return { key, g, seg: g.lastElementChild };
   }
+
+  // Order: per-second countdown first, then the (collapsed) report intervals, then the rest.
+  const list = $('optList');
+  const simple = ['count', 'cont', 'overIv', 'mix'].map(group);
+  const ivBox = document.createElement('div');
+  ivBox.className = 'group';
+  ivBox.innerHTML =
+    '<button type="button" class="disclose" aria-expanded="false"><span class="label"><b>報時間隔</b><small id="ivSummary"></small></span><span class="chev"></span></button>' +
+    '<div class="collapse"><div class="collapse-inner" inert></div></div>';
+  const ivInner = ivBox.querySelector('.collapse-inner');
+  const ivSubs = ['sec', 'min', 'mid', 'hour'].map((k) => {
+    const g = document.createElement('div');
+    g.className = 'sub';
+    g.innerHTML = '<div class="label"><b></b></div><div class="segwrap"></div>';
+    g.querySelector('b').textContent = O[k].title;
+    ivInner.append(g);
+    return { key: k, seg: g.lastElementChild };
+  });
+  ivBox.querySelector('.disclose').onclick = () => {
+    const open = !ivBox.classList.contains('open');
+    ivBox.classList.toggle('open', open);
+    ivBox.querySelector('.disclose').setAttribute('aria-expanded', String(open));
+    ivInner.inert = !open;
+  };
+  list.append(simple[0].g, ivBox, simple[1].g, simple[2].g, simple[3].g);
+
+  function renderOptions() {
+    simple.forEach(({ key, g, seg }) => {
+      g.hidden = O[key].when ? !O[key].when() : false;
+      segment(seg, key);
+    });
+    ivSubs.forEach(({ key, seg }) => segment(seg, key));
+    $('ivSummary').textContent = ['sec', 'min', 'mid', 'hour'].map(label).join(' · ');
+  }
+
+  /* ---------- Target input: clock wheels / duration buttons ---------- */
+  const humanDur = (t) => {
+    const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60;
+    return [h && `${h} 時`, m && `${m} 分`, s && `${s} 秒`].filter(Boolean).join(' ');
+  };
+  function renderDur() {
+    const b = $('durTotal');
+    b.textContent = durTotal ? humanDur(durTotal) : '尚未設定';
+    b.classList.toggle('empty', !durTotal);
+    $('durClear').hidden = !durTotal;
+    tick();
+  }
+  const CHIPS = [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [180, '3 分'], [300, '5 分'], [600, '10 分'], [900, '15 分'], [1800, '30 分']];
+  $('chips').replaceChildren(...CHIPS.map(([sec, text]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = '+' + text;
+    b.setAttribute('aria-label', `增加 ${text}`);
+    b.onclick = () => { durTotal = Math.min(MAX_DUR, durTotal + sec); buzz(6); renderDur(); };
+    return b;
+  }));
+  $('durClear').onclick = () => { durTotal = 0; renderDur(); };
+
   function renderMode() {
     [...$('modeSeg').children].forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === cfg.mode)));
+    if (cfg.mode === 'clock' && !clockTouched) { clockToNow(); syncClock(); }
     $('wClock').hidden = cfg.mode !== 'clock';
-    $('wDur').hidden = cfg.mode !== 'dur';
+    $('durBox').hidden = cfg.mode !== 'dur';
     tick();
   }
   [...$('modeSeg').children].forEach((b) => { b.onclick = () => { cfg.mode = b.dataset.v; save(); renderMode(); }; });
 
-  /* ---------- Wheel pickers ---------- */
   const IH = 44;
-  function wheel(host, key, cols) {
-    const els2 = cols.map((c, ci) => {
+  function wheel(host, cols) {
+    const colEls = cols.map((c, ci) => {
       const col = document.createElement('div');
       col.className = 'col'; col.tabIndex = 0; col._idx = -1;
       col.setAttribute('aria-label', c.unit);
@@ -276,7 +374,8 @@
         const idx = clamp(Math.round(col.scrollTop / IH), 0, c.max);
         if (idx !== col._idx) {
           col._idx = idx; mark(col, idx); buzz(4);
-          cfg[key][ci] = idx; save(); tick();
+          clockPick[ci] = idx; if (!syncing) clockTouched = true;
+          tick();
         }
       }, { passive: true });
       col.addEventListener('click', (e) => {
@@ -286,45 +385,63 @@
       host.append(col);
       return col;
     });
+    let syncing = false;
     const mark = (col, idx) => { col._sel?.classList.remove('sel'); col._sel = col.children[idx]; col._sel?.classList.add('sel'); };
-    return () => els2.forEach((col, i) => { col._idx = cfg[key][i]; col.scrollTop = col._idx * IH; mark(col, col._idx); });
+    return () => {
+      syncing = true;
+      colEls.forEach((col, i) => { col._idx = clockPick[i]; col.scrollTop = col._idx * IH; mark(col, col._idx); });
+      setTimeout(() => { syncing = false; }, 200);
+    };
   }
-  const syncClock = wheel($('wClock'), 'clock', [{ max: 23, unit: '時' }, { max: 59, unit: '分' }]);
-  const syncDur = wheel($('wDur'), 'dur', [{ max: 23, unit: '時' }, { max: 59, unit: '分' }, { max: 59, unit: '秒' }]);
+  const syncClock = wheel($('wClock'), [{ max: 23, unit: '時' }, { max: 59, unit: '分' }]);
 
-  /* ---------- Voice: recorded clips via Web Audio, browser speech as fallback ---------- */
-  const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
+  /* ---------- Voice ----------
+     Every announcement is pre-scheduled on the Web Audio clock, which runs on the audio thread:
+     it keeps firing on time even when the page is minimised and its timers are throttled. */
   const D = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
   const zh = (n) => n < 10 ? D[n] : n < 20 ? '十' + D[n - 10] : D[Math.floor(n / 10)] + '十' + D[n % 10];
   const u = (n) => (n === 2 ? '兩' : zh(n));
 
-  let ctx = null, seq = 0;
-  const active = new Set();
-  const decoded = new Map();
+  let ctx = null, gen = 0, lastEnd = 0, base = { audio: 0, wall: 0 };
+  const sources = new Set();
+  const bufs = new Map();                          // clip name -> AudioBuffer
+  const loading = new Map();
+  let fallbackQ = [];                              // events whose clips are unavailable: spoken by tick() via browser speech
+
+  function applyAudioSession() {                   // transient plays on top of music/podcasts; playback takes the audio over
+    try { if (navigator.audioSession) navigator.audioSession.type = cfg.mix === 'mix' ? 'transient' : 'playback'; } catch {}
+  }
   function audioCtx() {
     try {
       ctx ||= new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state !== 'running') ctx.resume();
     } catch {}
     return ctx;
   }
   function loadClip(name) {
-    if (!decoded.has(name)) {
-      decoded.set(name, fetch(`audio/${name}.mp3`)
+    if (bufs.has(name)) return Promise.resolve(bufs.get(name));
+    if (!loading.has(name)) {
+      loading.set(name, fetch(`audio/${name}.mp3`)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
         .then((b) => new Promise((ok, no) => audioCtx().decodeAudioData(b, ok, no)))
-        .catch(() => { decoded.delete(name); return null; }));
+        .then((buf) => { bufs.set(name, buf); return buf; })
+        .catch(() => null)
+        .finally(() => loading.delete(name)));
     }
-    return decoded.get(name);
+    return loading.get(name);
   }
-  function stopAudio() {
-    active.forEach((s) => { s.onended = null; try { s.stop(); } catch {} });
-    active.clear();
+  function stopAll() {
+    gen++; lastEnd = 0; fallbackQ = []; base = { audio: 0, wall: 0 };   // base.wall = 0 pauses the drift check
+    sources.forEach((s) => { s.onended = null; try { s.stop(); } catch {} });
+    sources.clear();
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {}
   }
-  let keepAlive = null;       // silent loop: keeps iOS in "playback" mode (ringer switch won't mute) and the page unthrottled
+
+  let keepAlive = null;       // silent loop: keeps the audio session (and the page) alive while minimised
   function unlockAudio() {
+    applyAudioSession();
     audioCtx();
-    if (keepAlive) return;
+    if (keepAlive) { keepAlive.play().catch(() => {}); return; }
     try {
       const n = 8000, v = new DataView(new ArrayBuffer(44 + n));
       const w = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
@@ -349,23 +466,34 @@
       synth.speak(ut);
     } catch {}
   }
-  async function say(p) {                           // p = { clips: [...], text }
-    if (!p) return;
-    const mine = ++seq;
-    stopAudio();
-    const bufs = await Promise.all(p.clips.map(loadClip));
-    if (mine !== seq) return;                       // superseded while loading
-    if (ctx && bufs.every(Boolean)) {
-      let at = ctx.currentTime + 0.01;
-      bufs.forEach((b) => {
+
+  const addFallback = (evts) => { fallbackQ.push(...evts); fallbackQ.sort((a, b) => a.at - b.at); };
+
+  // evts: [{ at: epoch ms, p: { clips, text } }] -> scheduled on the audio clock
+  async function schedule(evts) {
+    evts = evts.filter((e) => e && e.p).sort((a, b) => a.at - b.at);
+    if (!evts.length) return;
+    const mine = gen;
+    await Promise.all([...new Set(evts.flatMap((e) => e.p.clips))].map(loadClip));
+    if (mine !== gen) return;                      // cancelled (paused / reset) while loading
+    const wall = Date.now();
+    if (!ctx) { addFallback(evts); return; }
+    const a0 = ctx.currentTime;
+    base = { audio: a0, wall };
+    evts.forEach((e) => {
+      if (e.at < wall - 300) return;               // already past
+      const list = e.p.clips.map((c) => bufs.get(c));
+      if (list.some((b) => !b)) { addFallback([e]); return; }
+      let at = Math.max(a0 + (e.at - wall) / 1000, lastEnd, a0 + 0.01);   // never overlap the previous clip
+      list.forEach((b) => {
         const src = ctx.createBufferSource();
         src.buffer = b; src.connect(ctx.destination); src.start(at);
         at += b.duration + 0.03;
-        active.add(src); src.onended = () => active.delete(src);
+        sources.add(src); src.onended = () => sources.delete(src);
       });
-    } else speakFallback(p.text);
+      lastEnd = at;
+    });
   }
-  const stopSpeech = () => { seq++; stopAudio(); try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {} };
 
   // 「剩餘…」 / 「超過…」: <1 min in seconds, <1 h in minutes, otherwise hours + minutes.
   function phrase(sec, over) {
@@ -379,6 +507,14 @@
     if (!h) return { clips: [`${k}m${m}`], text: `${pre}${u(m)}分鐘` };
     if (h > 24) return null;
     return { clips: [`${k}h${h}`, ...(m ? [`mm${m}`] : [])], text: `${pre}${u(h)}小時${m ? u(m) + '分鐘' : ''}` };
+  }
+  // The opening announcement is exact: minutes and seconds under an hour.
+  function startPhrase(R0) {
+    const s = Math.round(R0);
+    if (s < 60) return phrase(s, false);
+    const M = Math.floor(s / 60), r = s % 60;
+    if (M >= 60) return phrase(s, false);
+    return { clips: [`m${M}`, ...(r ? [`ss${r}`] : [])], text: `剩餘${u(M)}分鐘${r ? u(r) + '秒' : ''}` };
   }
   const countPhrase = (n) => ({ clips: [`n${n}`], text: zh(n) });
   const endPhrase = () => ({ clips: ['timeup'], text: '時間到' });
@@ -396,9 +532,9 @@
     return n === 0 ? '' : n === 1 ? '明天 ' : n === 2 ? '後天 ' : `${n} 天後 `;
   }
   function targetFor(now) {
-    if (cfg.mode === 'dur') return now + (cfg.dur[0] * 3600 + cfg.dur[1] * 60 + cfg.dur[2]) * 1000;
+    if (cfg.mode === 'dur') return now + durTotal * 1000;
     const d = new Date(now);
-    d.setHours(cfg.clock[0], cfg.clock[1], 0, 0);
+    d.setHours(clockPick[0], clockPick[1], 0, 0);
     return d.getTime() <= now ? d.getTime() + 86400000 : d.getTime();
   }
 
@@ -418,68 +554,76 @@
     out.push({ t: 0, type: 'end' });
     return out.sort((a, b) => b.t - a.t);
   }
+  const markPhrase = (m) => m.type === 'report' ? phrase(m.t, false) : m.type === 'count' ? countPhrase(m.t) : endPhrase();
 
   /* ---------- State ---------- */
   let st = 'idle';                 // idle | run | over | done
   let target = 0, total = 1, paused = false, pausedMs = 0;
-  let marks = [], mi = 0, overNext = Infinity;
+  let marks = [], overGen = 0;     // overGen = how many 「超過」 reports are already scheduled
+
+  const runEvents = () => marks.map((m) => ({ at: target - m.t * 1000, p: markPhrase(m) }));
+  const overEvents = (from, to) => {
+    const out = [];
+    for (let k = from; k <= to; k++) out.push({ at: target + k * cfg.overIv * 1000, p: phrase(k * cfg.overIv, true) });
+    return out.filter((e) => e.p);
+  };
+  // everything that is still ahead of us, in two stages so the next announcement is never starved by decoding
+  function scheduleAhead() {
+    const now = Date.now();
+    const evts = [...runEvents(), ...(cfg.cont === 'say' ? overEvents(1, overGen) : [])].filter((e) => e.at > now + 30);
+    const near = evts.filter((e) => e.at < now + 20000), far = evts.filter((e) => e.at >= now + 20000);
+    schedule(near).then(() => schedule(far));
+  }
 
   function start() {
     unlockAudio();
+    stopAll();
     const t0 = Date.now();
     target = targetFor(t0);
     const R0 = (target - t0) / 1000;
     total = Math.max(1, R0);
-    marks = buildMarks(R0); mi = 0; paused = false; overNext = Infinity;
+    marks = buildMarks(R0); paused = false;
+    overGen = cfg.cont === 'say' ? 240 : 0;
     st = 'run';
-    // warm the clips this run will need, then announce the starting point
-    marks.forEach((m) => {
-      const p = m.type === 'report' ? phrase(m.t, false) : m.type === 'count' ? countPhrase(m.t) : endPhrase();
-      p && p.clips.forEach(loadClip);
-    });
-    say(phrase(R0, false));
+    schedule([{ at: t0, p: startPhrase(R0) }]);
+    scheduleAhead();
     setUI(); tick();
   }
-  function finish() { stopSpeech(); st = 'idle'; paused = false; setUI(); tick(); }
+  function finish() { stopAll(); st = 'idle'; paused = false; setUI(); tick(); }
   function togglePause() {
     const t = Date.now();
-    if (!paused) { pausedMs = target - t; paused = true; stopSpeech(); }
-    else { target = t + pausedMs; paused = false; }
+    if (!paused) { pausedMs = target - t; paused = true; stopAll(); }
+    else { target = t + pausedMs; paused = false; unlockAudio(); scheduleAhead(); }
     setUI(); tick();
-  }
-
-  function fire(m, R) {
-    if (m.type === 'report') say(phrase(m.t, false));
-    else if (m.type === 'count') { if (R >= m.t - 1.5) say(countPhrase(m.t)); }
-    else {                                           // end
-      say(endPhrase()); buzz([120, 80, 120]);
-      if (cfg.cont === 'stop') st = 'done';
-      else { st = 'over'; overNext = cfg.cont === 'say' ? cfg.overIv : Infinity; }
-      setUI();
-    }
   }
 
   function tick() {
     const now = Date.now();
-    const d = new Date(now);
-    setText(els.nowT, clockStr(d, true));
-
-    let R, tgt = target;
+    setText(els.nowT, clockStr(new Date(now), true));
+    let tgt = target;
     if (st === 'idle') tgt = targetFor(now);
-    if (st === 'idle' || st === 'run' || st === 'over' || st === 'done') {
-      R = paused ? pausedMs / 1000 : (tgt - now) / 1000;
-    }
+    const R = paused ? pausedMs / 1000 : (tgt - now) / 1000;
 
-    if (st === 'run' && !paused) {
-      let due = null;
-      while (mi < marks.length && R <= marks[mi].t + 0.03) { due = marks[mi++]; if (due.type === 'end') break; }
-      if (due) fire(due, R);
-    } else if (st === 'over') {
-      const O = -R;
-      if (O >= overNext - 0.03) {
-        say(phrase(overNext, true));
-        while (O >= overNext - 0.03) overNext += cfg.overIv;
+    if (st === 'run' && !paused && R <= 0.03) {
+      buzz([120, 80, 120]);
+      st = cfg.cont === 'stop' ? 'done' : 'over';
+      setUI();
+    }
+    if ((st === 'run' || st === 'over') && !paused) {
+      // keep the audio clock honest: if it was suspended (call, Siri, app switch) the schedule has slipped
+      if (ctx) {
+        if (ctx.state !== 'running') ctx.resume();
+        else if (base.wall && now - base.wall > 5000 && Math.abs(ctx.currentTime - (base.audio + (now - base.wall) / 1000)) > 0.4 && sources.size) {
+          stopAll(); scheduleAhead();
+        }
       }
+      // refill 「超過」 reports while the page is in view
+      if (cfg.cont === 'say' && target + overGen * cfg.overIv * 1000 < now + 30 * 60000) {
+        const from = overGen + 1; overGen += 120;
+        schedule(overEvents(from, overGen));
+      }
+      // browser-speech fallback for any announcement without a recorded clip
+      while (fallbackQ.length && fallbackQ[0].at <= now) { const e = fallbackQ.shift(); speakFallback(e.p.text); }
     }
     render(R, tgt, now);
   }
@@ -488,14 +632,14 @@
 
   function render(R, tgt, now) {
     const dur = cfg.mode === 'dur';
-    setText(els.tgtT, dayLabel(tgt, now) + clockStr(new Date(tgt), dur));
+    setText(els.tgtT, (st === 'idle' && dur && !durTotal) ? '--:--:--' : dayLabel(tgt, now) + clockStr(new Date(tgt), dur));
     setText(els.tgtLabel, '目標');
 
     let accent = 'idle', phase, timeStr, note = ' ', offset;
     if (st === 'idle') {
       phase = dur ? '倒數時間' : '距離目標';
       timeStr = fmtHMS(Math.ceil(R)); offset = 0;
-      els.hint.textContent = (dur && R < 1) ? '請設定大於 0 的時間' : '';
+      els.hint.textContent = '';
     } else if (st === 'run') {
       accent = 'run'; phase = paused ? '已暫停' : '剩餘時間';
       timeStr = fmtHMS(Math.ceil(R)); offset = 1 - clamp(R / total, 0, 1);
@@ -510,7 +654,7 @@
     setText(els.phase, phase); setText(els.time, timeStr); setText(els.note, note);
     els.time.classList.toggle('long', timeStr.length >= 7);
     root.style.setProperty('--accent', { idle: 'var(--blue)', run: 'var(--green)', over: 'var(--orange)', done: 'var(--red)' }[accent]);
-    els.main.disabled = st === 'idle' && dur && R < 1;
+    els.main.disabled = st === 'idle' && dur && !durTotal;
   }
 
   function setUI() {
@@ -518,7 +662,6 @@
     els.setup.classList.toggle('locked', busy);
     els.opts.classList.toggle('locked', busy);
     els.sec.hidden = !(st === 'run' && cfg.mode === 'dur');
-    els.sec.textContent = '結束';
     els.main.textContent =
       st === 'idle' ? '開始' :
       st === 'done' ? '重設' :
@@ -546,15 +689,21 @@
       } else if (!want && wake) { await wake.release(); wake = null; }
     } catch { wake = null; }
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncWake(); tick(); } });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    syncWake();
+    if (st === 'idle' && cfg.mode === 'clock' && !clockTouched) { clockToNow(); syncClock(); }
+    tick();
+  });
 
   /* ---------- Init ---------- */
   renderOptions();
+  renderDur();
   renderMode();
-  syncClock(); syncDur();
+  syncClock();
   setUI();
   tick();
-  setInterval(tick, 100);        // also runs in background tabs; the silent audio loop keeps it unthrottled
+  setInterval(tick, 100);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 </script>
