@@ -139,6 +139,7 @@
   .opt small { font-size: 0.8rem; font-weight: 500; }
   .col.wide { width: 4.6rem; }
   .opt.sel { color: var(--text); font-weight: 600; }
+  .optnote { margin: 0.5rem 0 0; font-size: 0.78rem; line-height: 1.45; color: var(--text-2); }
   .hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.8rem; color: var(--text-2); min-height: 1.2em; }
 
   /* audio-interrupted banner */
@@ -262,11 +263,11 @@
     cont: 'say',                               // after the target: stop | run | say
     overIv: 60,                                // seconds between 「超過…」 reports
     h24: '24',                                 // clock format: 24 | 12
-    mix: 'ambient',                            // ambient: mix with other apps | transient: laid on top (may duck) | playback: take over audio
+    mix: 'playback',                           // playback: keeps going in the background but pauses other audio | ambient: mixes, foreground only
   };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
   cfg.mode = 'dur';                                            // always open on 「倒數多久」
-  cfg.mix = { mix: 'ambient', solo: 'playback' }[cfg.mix] || cfg.mix;   // older saved values
+  if (cfg.mixV !== 2) { cfg.mix = 'playback'; cfg.mixV = 2; }    // iOS only keeps playing in the background with 「playback」
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
 
   // Not persisted: the clock picker starts at now + 10 min, the duration starts empty.
@@ -291,8 +292,9 @@
       opts: [['stop', '停止'], ['run', '只計時'], ['say', '計時並報時']] },
     overIv: { title: '時間到之後報時間隔', sub: '每隔多久', when: () => cfg.cont === 'say',
       opts: [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [300, '5 分'], [600, '10 分']] },
-    mix: { title: '與音樂同時播放', sub: '被 Podcast 或音樂打斷時，換一種試試',
-      opts: [['ambient', '混音'], ['transient', '疊加'], ['playback', '獨佔']] },
+    mix: { title: '音訊模式', sub: '',
+      note: 'iOS 的限制：縮小或鎖定螢幕後還能報時，就一定會暫停其他 App 的音樂；想一邊聽音樂，App 就要留在前景。',
+      opts: [['playback', '背景報時'], ['ambient', '搭配音樂']] },
   };
   const label = (k) => (O[k].opts.find(([v]) => v === cfg[k]) || [0, ''])[1];
 
@@ -313,7 +315,9 @@
     g.innerHTML = '<div class="label"><b></b><small></small></div><div class="segwrap"></div>';
     g.querySelector('b').textContent = O[key].title;
     g.querySelector('small').textContent = O[key].sub || '';
-    return { key, g, seg: g.lastElementChild };
+    const seg = g.querySelector('.segwrap');
+    if (O[key].note) { const n = document.createElement('p'); n.className = 'optnote'; n.textContent = O[key].note; g.append(n); }
+    return { key, g, seg };
   }
 
   // Order: per-second countdown first, then the (collapsed) report intervals, then the rest.

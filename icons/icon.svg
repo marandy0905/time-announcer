@@ -1,12 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c2c30"/><stop offset="1" stop-color="#050506"/></linearGradient>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cf0b4"/><stop offset="1" stop-color="#19b86a"/></linearGradient>
-  </defs>
-  <rect width="1024" height="1024" fill="url(#bg)"/>
-  <circle cx="512" cy="512" r="300" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="72"/>
-  <path d="M512 212 A300 300 0 1 1 212 512" fill="none" stroke="url(#g)" stroke-width="72" stroke-linecap="round"/>
-  <line x1="512" y1="512" x2="512" y2="330" stroke="#fff" stroke-width="44" stroke-linecap="round"/>
-  <line x1="512" y1="512" x2="640" y2="580" stroke="#fff" stroke-width="44" stroke-linecap="round"/>
-  <circle cx="512" cy="512" r="34" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs>
+<filter id="b20" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="20"/></filter>
+<filter id="b8" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="8"/></filter>
+<filter id="ds" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#000" flood-opacity=".25"/></filter>
+<linearGradient id="lightTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".2" stop-color="#fff" stop-opacity=".11"/><stop offset=".4" stop-color="#fff" stop-opacity=".05"/><stop offset=".6" stop-color="#fff" stop-opacity=".015"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="shadeBot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".5" stop-color="#000" stop-opacity=".03"/><stop offset="1" stop-color="#000" stop-opacity=".12"/></linearGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".3" stop-color="#fff" stop-opacity=".25"/><stop offset=".75" stop-color="#fff" stop-opacity=".05"/><stop offset="1" stop-color="#fff" stop-opacity=".4"/></linearGradient>
+<linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.46"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.26"/></linearGradient>
+<linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.64"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.4"/></linearGradient>
+<linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.98"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.84"/></linearGradient>
+<mask id="m0" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><circle cx="512" cy="512" r="392" fill="#000"/></mask>
+<mask id="m1" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><circle cx="512" cy="512" r="274" fill="#000"/></mask>
+<mask id="m2" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><circle cx="512" cy="512" r="174" fill="#000"/></mask>
+</defs>
+<rect width="1024" height="1024" fill="#0a74f0"/><rect width="1024" height="1024" fill="url(#lightTop)"/><rect width="1024" height="1024" fill="url(#shadeBot)"/>
+<g mask="url(#m0)"><circle cx="512" cy="536" r="392" fill="#000" fill-opacity="0.14" filter="url(#b20)"/></g>
+<circle cx="512" cy="512" r="392" fill="url(#g1)"/>
+<circle cx="512" cy="512" r="389.5" fill="none" stroke="url(#rim)" stroke-width="5"/>
+<g mask="url(#m1)"><circle cx="512" cy="536" r="274" fill="#000" fill-opacity="0.16" filter="url(#b20)"/></g>
+<circle cx="512" cy="512" r="274" fill="url(#g2)"/>
+<circle cx="512" cy="512" r="271.5" fill="none" stroke="url(#rim)" stroke-width="5"/>
+<g mask="url(#m2)"><circle cx="512" cy="536" r="174" fill="#000" fill-opacity="0.22" filter="url(#b20)"/></g>
+<circle cx="512" cy="512" r="174" fill="url(#g3)"/>
+<circle cx="512" cy="512" r="171.5" fill="none" stroke="url(#rim)" stroke-width="5"/>
+<ellipse cx="472" cy="416" rx="92" ry="30" fill="#fff" fill-opacity=".5" filter="url(#b8)" transform="rotate(-24 472 416)"/>
+<line x1="512.0" y1="366.0" x2="512.0" y2="390.0" stroke="#0a74f0" stroke-opacity=".35" stroke-width="12" stroke-linecap="round"/>
+<line x1="658.0" y1="512.0" x2="634.0" y2="512.0" stroke="#0a74f0" stroke-opacity=".35" stroke-width="12" stroke-linecap="round"/>
+<line x1="512.0" y1="658.0" x2="512.0" y2="634.0" stroke="#0a74f0" stroke-opacity=".35" stroke-width="12" stroke-linecap="round"/>
+<line x1="366.0" y1="512.0" x2="390.0" y2="512.0" stroke="#0a74f0" stroke-opacity=".35" stroke-width="12" stroke-linecap="round"/>
+<g filter="url(#ds)"><line x1="512" y1="512" x2="448.9" y2="466.2" stroke="#0a74f0" stroke-width="22" stroke-linecap="round"/><line x1="512" y1="512" x2="620.4" y2="476.8" stroke="#0a74f0" stroke-width="20" stroke-linecap="round"/><circle cx="512" cy="512" r="15" fill="#0a74f0"/></g>
 </svg>
