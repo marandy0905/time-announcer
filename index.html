@@ -139,6 +139,12 @@
   .opt small { font-size: 0.8rem; font-weight: 500; }
   .col.wide { width: 4.6rem; }
   .opt.sel { color: var(--text); font-weight: 600; }
+  .timefield {
+    width: 100%; font: inherit; font-size: 16px; font-weight: 600; color: var(--text); background: var(--fill);
+    border: 0; border-radius: 0.8rem; padding: 0.6rem 0.85rem; -webkit-appearance: none; appearance: none; min-height: 2.6rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .timefield:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); }
   .optnote { margin: 0.5rem 0 0; font-size: 0.78rem; line-height: 1.45; color: var(--text-2); }
   .hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.8rem; color: var(--text-2); min-height: 1.2em; }
 
@@ -339,6 +345,8 @@
     count: 10,                                 // per-second countdown starts at N seconds left (0 = off)
     cont: 'say',                               // after the target: stop | run | say
     overIv: 60,                                // seconds between 「超過…」 reports
+    stopMode: 'none',                          // after the target: never | after N seconds | at a clock time
+    stopAfter: 1800, stopAt: '23:00',
     h24: '24',                                 // clock format: 24 | 12
     mix: 'playback',                           // playback: keeps going in the background but pauses other audio | ambient: mixes, foreground only
   };
@@ -369,6 +377,10 @@
       opts: [['stop', '停止'], ['run', '只計時'], ['say', '計時並報時']] },
     overIv: { title: '時間到之後報時間隔', sub: '每隔多久', when: () => cfg.cont === 'say',
       opts: [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [300, '5 分'], [600, '10 分']] },
+    stopMode: { title: '自動停止', sub: '超過時間之後', when: () => cfg.cont !== 'stop',
+      opts: [['none', '不停止'], ['after', '超過一段時間'], ['at', '到指定時間']] },
+    stopAfter: { title: '超過多久後停止', sub: '', when: () => cfg.cont !== 'stop' && cfg.stopMode === 'after',
+      opts: [[300, '5 分'], [600, '10 分'], [1800, '30 分'], [3600, '1小時'], [7200, '2小時']] },
     mix: { title: '音訊模式', sub: '',
       note: 'iOS 的限制：縮小或鎖定螢幕後還能報時，就一定會暫停其他 App 的音樂；想一邊聽音樂，App 就要留在前景。',
       opts: [['playback', '背景報時'], ['ambient', '搭配音樂']] },
@@ -399,8 +411,14 @@
 
   // Order: per-second countdown first, then the (collapsed) report intervals, then the rest.
   const list = $('optList');
-  const simple = ['count', 'cont', 'overIv', 'mix'].map(group);
-  simple[2].g.classList.add('joined');
+  const simple = ['count', 'cont', 'overIv', 'stopMode', 'stopAfter', 'mix'].map(group);
+  simple[2].g.classList.add('joined'); simple[3].g.classList.add('joined'); simple[4].g.classList.add('joined');
+  const stopAtBox = document.createElement('div');
+  stopAtBox.className = 'group joined';
+  stopAtBox.innerHTML = '<div class="label"><b>停止時間</b><small>目標之後的第一個這個時間</small></div><input type="time" class="timefield" id="stopAt" aria-label="停止時間">';
+  const stopAtInput = stopAtBox.querySelector('input');
+  stopAtInput.value = cfg.stopAt;
+  stopAtInput.onchange = () => { if (stopAtInput.value) { cfg.stopAt = stopAtInput.value; save(); } };
   const ivBox = document.createElement('div');
   ivBox.className = 'group';
   ivBox.innerHTML =
@@ -421,13 +439,14 @@
     ivBox.querySelector('.disclose').setAttribute('aria-expanded', String(open));
     ivInner.inert = !open;
   };
-  list.append(simple[0].g, ivBox, simple[1].g, simple[2].g, simple[3].g);
+  list.append(simple[0].g, ivBox, simple[1].g, simple[2].g, simple[3].g, simple[4].g, stopAtBox, simple[5].g);
 
   function renderOptions() {
     simple.forEach(({ key, g, seg }) => {
       g.hidden = O[key].when ? !O[key].when() : false;
       segment(seg, key);
     });
+    stopAtBox.hidden = !(cfg.cont !== 'stop' && cfg.stopMode === 'at');
     ivSubs.forEach(({ key, seg }) => segment(seg, key));
     $('ivSummary').textContent = ['sec', 'min', 'mid', 'hour'].map(label).join(' · ');
   }
@@ -738,13 +757,24 @@
   let st = 'idle';                 // idle | run | over | done
   let target = 0, total = 1, paused = false, pausedMs = 0;
   let stuckSince = 0;
+  let stopWall = Infinity, autoStopped = false;
   let marks = [], overGen = 0;     // overGen = how many 「超過」 reports are already scheduled
 
+  // When 「超過」 reporting (and the podcast) should end: N seconds after the target, or the first HH:MM after it.
+  function computeStop() {
+    if (cfg.cont === 'stop' || cfg.stopMode === 'none') return Infinity;
+    if (cfg.stopMode === 'after') return target + cfg.stopAfter * 1000;
+    const [h, m] = String(cfg.stopAt).split(':').map(Number);
+    const d = new Date(target);
+    d.setHours(h || 0, m || 0, 0, 0);
+    if (d.getTime() < target) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
   const runEvents = () => marks.map((m) => ({ at: target - m.t * 1000, p: markPhrase(m) }));
   const overEvents = (from, to) => {
     const out = [];
     for (let k = from; k <= to; k++) out.push({ at: target + k * cfg.overIv * 1000, p: phrase(k * cfg.overIv, true) });
-    return out.filter((e) => e.p);
+    return out.filter((e) => e.p && e.at <= stopWall);
   };
   // everything that is still ahead of us, in two stages so the next announcement is never starved by decoding
   function scheduleAhead() {
@@ -761,18 +791,38 @@
     target = targetFor(t0);
     const R0 = (target - t0) / 1000;
     total = Math.max(1, R0);
-    marks = buildMarks(R0); paused = false;
+    marks = buildMarks(R0); paused = false; autoStopped = false;
     overGen = cfg.cont === 'say' ? 240 : 0;
     st = 'run';
+    stopWall = computeStop();
     schedule([{ at: t0, p: startPhrase(R0) }]);
     scheduleAhead();
     setUI(); tick();
   }
-  function finish() { stopAll(); st = 'idle'; paused = false; setUI(); tick(); }
+  function finish() { stopAll(); st = 'idle'; paused = false; autoStopped = false; setUI(); tick(); }
+  function autoStop() {                            // overtime limit reached: no more announcements, podcast fades out
+    st = 'done'; autoStopped = true;
+    stopPodFade();
+    buzz([200, 100, 200]);
+    setUI();
+  }
+  function stopPodFade() {
+    if (!pod || pod.paused) return;
+    podHeld = false;
+    const mine = pod;
+    if (podGain && ctx) {
+      const t = ctx.currentTime, g = podGain.gain;
+      g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0.0001, t + 1.2);
+      setTimeout(() => {
+        mine.pause();
+        if (podGain && pod === mine && ctx) { podGain.gain.cancelScheduledValues(ctx.currentTime); podGain.gain.setValueAtTime(1, ctx.currentTime); }
+      }, 1300);
+    } else mine.pause();
+  }
   function togglePause() {
     const t = Date.now();
     if (!paused) { pausedMs = target - t; paused = true; stopAll(); }
-    else { target = t + pausedMs; paused = false; unlockAudio(); scheduleAhead(); }
+    else { target = t + pausedMs; paused = false; stopWall = computeStop(); unlockAudio(); scheduleAhead(); }
     setUI(); tick();
   }
 
@@ -789,6 +839,7 @@
       st = cfg.cont === 'stop' ? 'done' : 'over';
       setUI();
     }
+    if (st === 'over' && now >= stopWall) autoStop();
     if ((st === 'run' || st === 'over') && !paused) {
       // keep the audio clock honest
       if (ctx) {
@@ -801,7 +852,7 @@
         }
       }
       // refill 「超過」 reports while the page is in view
-      if (cfg.cont === 'say' && target + overGen * cfg.overIv * 1000 < now + 30 * 60000) {
+      if (cfg.cont === 'say' && target + overGen * cfg.overIv * 1000 < Math.min(now + 30 * 60000, stopWall)) {
         const from = overGen + 1; overGen += 120;
         schedule(overEvents(from, overGen));
       }
@@ -835,7 +886,10 @@
       accent = 'over'; phase = '已超過'; diff = fmtDiff(-R);
       note = cfg.cont === 'say' ? '持續報時中' : '持續計時中';
     } else {
-      accent = 'done'; phase = '時間到'; diff = fmtDiff(0);
+      accent = 'done';
+      phase = autoStopped ? '已自動停止' : '時間到';
+      diff = autoStopped ? fmtDiff((stopWall - target) / 1000) : fmtDiff(0);
+      if (autoStopped) note = `超過 ${humanDur(Math.round((stopWall - target) / 1000))} 後停止`;
     }
     if (!dur) note = ' ';
     setText(els.phase, phase); setText(els.note, note);
@@ -855,6 +909,7 @@
       st === 'done' ? '重設' :
       st === 'over' ? '結束' :
       cfg.mode === 'dur' ? (paused ? '繼續' : '暫停') : '結束';
+    if ((st === 'idle' || st === 'done') && keepAlive) keepAlive.pause();   // the silent loop is only needed while a timer runs
     syncWake();
   }
   els.main.onclick = () => {
