@@ -21,7 +21,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then((res) => {
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => {   // skip the HTTP cache (GitHub Pages sends max-age=600)
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put('index.html', copy));
       return res;
