@@ -204,13 +204,56 @@
   .pp-ctl .big { width: 3.6rem; height: 3.6rem; padding: 0; background: var(--blue); color: #fff; }
   .pp-ctl svg { width: 1.3rem; height: 1.3rem; fill: currentColor; }
 
+  /* pinned dial: after a timer starts it stays on screen, in a compact form, once the page is scrolled */
+  #dialSlot { min-width: 0; }
+  .dial.stuck {
+    position: fixed; top: max(8px, env(safe-area-inset-top)); left: 50%; z-index: 6; transform: translateX(-50%);
+    width: min(calc(100vw - 32px), 26rem); padding: 0.5rem 0.8rem 0.6rem; border-radius: 1.3rem;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; gap: 0 0.4rem;
+    animation: dropin 0.28s cubic-bezier(0.32, 0.72, 0, 1); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  }
+  @keyframes dropin { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  .dial.stuck .line, .dial.stuck .line.hero { padding: 0; border: 0; min-width: 0; overflow: hidden; }
+  .dial.stuck .line small, .dial.stuck .line.hero small { font-size: 0.68rem; font-weight: 500; }
+  .dial.stuck .line.hero small { color: var(--accent); }
+  .dial.stuck .val { font-size: 1.05rem; letter-spacing: -0.01em; }
+  .dial.stuck .line.hero .val { font-size: 1.6rem; letter-spacing: -0.03em; }
+  .dial.stuck .line.hero .val.long { font-size: 1.25rem; }
+  .dial.stuck .note, .dial.stuck .line.hero .note { display: none; }
+  .dial.stuck .controls { grid-column: 1 / -1; margin-top: 0.35rem; gap: 0.5rem; }
+  .dial.stuck .btn { min-width: 5rem; padding: 0.42rem 1.1rem; font-size: 0.9rem; }
+
+  /* podcast dock: pinned to the bottom once an episode has been played */
+  body.has-dock { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .dock {
+    position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 6; width: min(calc(100vw - 24px), 26rem);
+    display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.7rem; border-radius: 1.5rem;
+    background: var(--card); border: 1px solid var(--card-border);
+    backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    transform: translate(-50%, 160%); pointer-events: none; transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .dock.show { transform: translate(-50%, 0); pointer-events: auto; }
+  .dock img { flex: none; width: 2.7rem; height: 2.7rem; border-radius: 0.7rem; object-fit: cover; background: var(--track); }
+  .dock .t { flex: 1; min-width: 0; }
+  .dock .t b { display: block; font-size: 0.85rem; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dock .t small { display: block; color: var(--text-2); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dock button {
+    flex: none; appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 0.8rem; color: var(--text);
+    background: var(--fill); border-radius: 999px; min-width: 2.6rem; height: 2.4rem; padding: 0 0.5rem; display: grid; place-items: center;
+    transition: transform 100ms ease-out, opacity 100ms;
+  }
+  .dock button:active { transform: scale(0.9); opacity: 0.7; }
+  .dock .big { width: 2.9rem; height: 2.9rem; padding: 0; background: var(--blue); color: #fff; }
+  .dock svg { width: 1.15rem; height: 1.15rem; fill: currentColor; }
+
   /* audio-interrupted banner */
   .fix {
-    position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom));
+    position: fixed; left: 50%; bottom: calc(var(--dock, 0px) + max(16px, env(safe-area-inset-bottom)));
     display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.5rem 0.6rem 1.25rem; border-radius: 999px;
     font-size: 0.95rem; font-weight: 500; background: var(--card); border: 1px solid var(--card-border);
     backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); transform: translate(-50%, 220%); pointer-events: none;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); transform: translate(-50%, calc(100% + var(--dock, 0px) + 48px)); pointer-events: none;
     transition: transform 0.45s cubic-bezier(0.32, 0.72, 0, 1); z-index: 5; white-space: nowrap;
   }
   .fix.show { transform: translate(-50%, 0); pointer-events: auto; }
@@ -258,12 +301,14 @@
   .chip:active { transform: scale(0.92); background: color-mix(in srgb, var(--blue) 35%, var(--fill)); }
   .chip:focus-visible, .clear:focus-visible, .disclose:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
 
+  @media (prefers-reduced-motion: reduce) { .dial.stuck { animation: none; } }
   @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; animation: none !important; } }
 </style>
 </head>
 <body>
 <main>
-  <section class="card dial" aria-live="off">
+  <div id="dialSlot">
+  <section class="card dial" id="dial" aria-live="off">
     <div class="line">
       <small>現在時間</small>
       <b class="val" id="nowT">--:--</b>
@@ -282,6 +327,7 @@
       <button class="btn primary" id="main">開始</button>
     </div>
   </section>
+  </div>
 
   <section class="card panel" id="setup">
     <div class="panel-head"><h2>目標時間</h2><div class="seg mini" id="hSeg" role="group" aria-label="時間格式"></div></div>
@@ -323,6 +369,13 @@
     <div id="optList"></div>
   </section>
 </main>
+<div class="dock" id="dock" aria-label="Podcast 播放控制">
+  <img id="dkArt" alt="">
+  <div class="t"><b id="dkTitle"></b><small id="dkShow"></small></div>
+  <button type="button" id="dkBack" aria-label="倒退 15 秒">−15</button>
+  <button type="button" id="dkPlay" class="big" aria-label="播放"><svg viewBox="0 0 24 24" id="dkIcon"><path d="M8 5v14l11-7z"/></svg></button>
+  <button type="button" id="dkFwd" aria-label="快轉 30 秒">+30</button>
+</div>
 <div class="fix" id="fix" role="alert"><span>語音被系統中斷了</span><button type="button" id="fixBtn">恢復報時</button></div>
 
 <script>
@@ -919,6 +972,7 @@
       st === 'done' ? '重設' :
       st === 'over' ? '結束' :
       cfg.mode === 'dur' ? (paused ? '繼續' : '暫停') : '結束';
+    updatePin();
     if ((st === 'idle' || st === 'done') && keepAlive) keepAlive.pause();   // the silent loop is only needed while a timer runs
     syncWake();
   }
@@ -1108,6 +1162,10 @@
   }
   function showPlayer() {
     $('pp').hidden = false;
+    for (const id of ['dkArt', 'ppArt']) { const im = $(id); im.style.visibility = ''; im.onerror = () => { im.style.visibility = 'hidden'; }; }
+    $('dkArt').src = ps.cur.ep.art || ps.cur.show.art || '';
+    $('dkTitle').textContent = ps.cur.ep.title;
+    $('dkShow').textContent = ps.cur.show.name;
     $('ppArt').src = ps.cur.ep.art || ps.cur.show.art || '';
     $('ppTitle').textContent = ps.cur.ep.title;
     $('ppShow').textContent = ps.cur.show.name;
@@ -1117,9 +1175,23 @@
 
   const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
   let seeking = false, lastSave = 0;
+  // The dock appears once something has been played, but only while the full player is scrolled out of view.
+  let podStarted = false, ppVisible = false;
+  function updateDock() {
+    const show = podStarted && !!ps.cur && !ppVisible;
+    $('dock').classList.toggle('show', show);
+    root.style.setProperty('--dock', show ? '84px' : '0px');
+    document.body.classList.toggle('has-dock', show);
+  }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((es) => { ppVisible = es[es.length - 1].isIntersecting; updateDock(); }, { threshold: 0.4 }).observe($('pp'));
+  }
+  $('dkPlay').onclick = () => $('ppPlay').click();
+  $('dkBack').onclick = () => $('ppBack').click();
+  $('dkFwd').onclick = () => $('ppFwd').click();
   function syncPlayer() {
     if (!pod) return;
-    $('ppIcon').innerHTML = (pod.paused && !podHeld) ? PLAY : PAUSE;
+    $('ppIcon').innerHTML = $('dkIcon').innerHTML = (pod.paused && !podHeld) ? PLAY : PAUSE;
     $('ppPlay').setAttribute('aria-label', pod.paused && !podHeld ? '播放' : '暫停');
     const d = isFinite(pod.duration) ? pod.duration : 0;
     const loaded = pod.readyState >= 1;
@@ -1132,6 +1204,7 @@
   function bindPod(a) {
     ['timeupdate', 'play', 'pause', 'durationchange', 'loadedmetadata', 'ended'].forEach((ev) => a.addEventListener(ev, () => {
       if (pod !== a) return;
+      if (ev === 'play') { podStarted = true; updateDock(); }
       syncPlayer();
       if (isFinite(a.duration) && ps.cur) ps.cur.dur = a.duration;
       if (ps.cur && a._seeked && (ev !== 'timeupdate' || Date.now() - lastSave > 5000)) { ps.cur.pos = a.currentTime; lastSave = Date.now(); savePod(); }
@@ -1167,6 +1240,21 @@
   window.addEventListener('pagehide', flushPos);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushPos(); });
   renderRecent(); restorePlayer();
+
+  /* ---------- Pinned dial ----------
+     While a timer runs, scrolling pins the dial to the top in a compact form; back at the top it returns to full size.
+     A fixed-height slot keeps the page from jumping when the card leaves the flow. */
+  const dial = $('dial'), slot = $('dialSlot');
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => { if (!dial.classList.contains('stuck')) slot.style.minHeight = dial.offsetHeight + 'px'; }).observe(dial);
+  }
+  function updatePin() {
+    const pin = st === 'run' || st === 'over' || st === 'done';
+    const y = window.scrollY, stuck = dial.classList.contains('stuck');
+    if (pin && !stuck && y > 40) { slot.style.minHeight = dial.offsetHeight + 'px'; dial.classList.add('stuck'); }
+    else if (stuck && (!pin || y < 12)) dial.classList.remove('stuck');
+  }
+  window.addEventListener('scroll', updatePin, { passive: true });
 
   /* ---------- Init ---------- */
   renderOptions();
