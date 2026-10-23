@@ -75,6 +75,7 @@
   .line.hero .val.long { font-size: clamp(2.6rem, 13.5vw, 3.8rem); }
   .val i { font-style: normal; font-size: 0.5em; font-weight: 500; margin: 0 0.3em 0 0.1em; opacity: 0.6; letter-spacing: 0; }
   .val i:last-child { margin-right: 0; }
+  .val i.ap { font-size: 0.42em; margin-right: 0.35em; opacity: 0.75; }
   .note { display: block; font-size: 0.85rem; color: var(--text-2); }
   .line.hero .note { min-height: 1.3em; margin-top: 0.1rem; }
   .controls { display: flex; justify-content: center; gap: 0.75rem; margin-top: 0.7rem; }
@@ -110,6 +111,11 @@
   :root { --card-solid: #fff; }
   @media (prefers-color-scheme: dark) { :root { --card-solid: #636366; } }
   .seg.mode { margin-bottom: 0.4rem; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.6rem; }
+  .panel-head h2 { margin: 0; }
+  .seg.mini { flex: none; }
+  .seg.mini button { flex: none; padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+  .sep { align-self: center; height: var(--ih); line-height: var(--ih); font-size: 1.5rem; font-weight: 600; margin: 0 -0.2rem; position: relative; }
 
   /* Wheel picker (native scroll-snap) */
   .wheel { position: relative; display: flex; justify-content: center; gap: 0.5rem; padding: 0.25rem 0 0.25rem; }
@@ -118,7 +124,7 @@
     background: var(--fill); border-radius: 0.7rem;
   }
   .col {
-    position: relative; width: 5rem; height: calc(var(--ih) * 5); padding-block: calc(var(--ih) * 2);
+    position: relative; width: 4rem; height: calc(var(--ih) * 5); padding-block: calc(var(--ih) * 2);
     overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain;
     touch-action: pan-y; cursor: grab; outline-offset: -2px; border-radius: 0.7rem;
     -webkit-mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
@@ -131,6 +137,7 @@
     font-size: 1.35rem; font-variant-numeric: tabular-nums; color: var(--text-2); transition: color 0.15s;
   }
   .opt small { font-size: 0.8rem; font-weight: 500; }
+  .col.wide { width: 4.6rem; }
   .opt.sel { color: var(--text); font-weight: 600; }
   .hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.8rem; color: var(--text-2); min-height: 1.2em; }
 
@@ -198,7 +205,7 @@
   </section>
 
   <section class="card panel" id="setup">
-    <h2>目標時間</h2>
+    <div class="panel-head"><h2>目標時間</h2><div class="seg mini" id="hSeg" role="group" aria-label="時間格式"></div></div>
     <div class="seg mode" id="modeSeg" role="group" aria-label="設定模式">
       <button type="button" data-v="clock">幾點幾分</button>
       <button type="button" data-v="dur">倒數多久</button>
@@ -237,6 +244,7 @@
     count: 10,                                 // per-second countdown starts at N seconds left (0 = off)
     cont: 'say',                               // after the target: stop | run | say
     overIv: 60,                                // seconds between 「超過…」 reports
+    h24: '24',                                 // clock format: 24 | 12
     mix: 'mix',                                // mix: play on top of music/podcasts | solo: take over audio
   };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
@@ -356,23 +364,41 @@
   [...$('modeSeg').children].forEach((b) => { b.onclick = () => { cfg.mode = b.dataset.v; save(); renderMode(); }; });
 
   const IH = 44;
-  function wheel(host, cols) {
-    const colEls = cols.map((c, ci) => {
+  const SEP = { sep: true };
+  function clockCols() {
+    const mins = { n: 60, label: p2, get: () => clockPick[1], set: (i) => { clockPick[1] = i; } };
+    if (cfg.h24 === '24') {
+      return [{ n: 24, label: p2, get: () => clockPick[0], set: (i) => { clockPick[0] = i; } }, SEP, mins];
+    }
+    const pm = () => (clockPick[0] >= 12 ? 1 : 0);
+    return [
+      { n: 2, label: (i) => ['上午', '下午'][i], wide: true, get: pm, set: (i) => { clockPick[0] = (clockPick[0] % 12) + 12 * i; } },
+      { n: 12, label: (i) => String(i + 1), get: () => (clockPick[0] % 12 || 12) - 1, set: (i) => { clockPick[0] = ((i + 1) % 12) + 12 * pm(); } },
+      SEP, mins,
+    ];
+  }
+  let syncing = false, colEls = [];
+  const mark = (col, idx) => { col._sel?.classList.remove('sel'); col._sel = col.children[idx]; col._sel?.classList.add('sel'); };
+  function buildClock() {
+    const host = $('wClock');
+    host.replaceChildren();
+    colEls = [];
+    clockCols().forEach((c) => {
+      if (c.sep) { const d = document.createElement('div'); d.className = 'sep'; d.textContent = ':'; host.append(d); return; }
       const col = document.createElement('div');
-      col.className = 'col'; col.tabIndex = 0; col._idx = -1;
-      col.setAttribute('aria-label', c.unit);
+      col.className = 'col' + (c.wide ? ' wide' : ''); col.tabIndex = 0; col._idx = -1; col._c = c;
       const frag = document.createDocumentFragment();
-      for (let v = 0; v <= c.max; v++) {
+      for (let i = 0; i < c.n; i++) {
         const o = document.createElement('div');
-        o.className = 'opt'; o.innerHTML = `${p2(v)}<small>${c.unit}</small>`;
+        o.className = 'opt'; o.textContent = c.label(i);
         frag.append(o);
       }
       col.append(frag);
       col.addEventListener('scroll', () => {
-        const idx = clamp(Math.round(col.scrollTop / IH), 0, c.max);
+        const idx = clamp(Math.round(col.scrollTop / IH), 0, c.n - 1);
         if (idx !== col._idx) {
           col._idx = idx; mark(col, idx); buzz(4);
-          clockPick[ci] = idx; if (!syncing) clockTouched = true;
+          c.set(idx); if (!syncing) clockTouched = true;
           tick();
         }
       }, { passive: true });
@@ -380,18 +406,26 @@
         const o = e.target.closest('.opt');
         if (o) col.scrollTo({ top: [...col.children].indexOf(o) * IH, behavior: 'smooth' });
       });
-      host.append(col);
-      return col;
+      host.append(col); colEls.push(col);
     });
-    let syncing = false;
-    const mark = (col, idx) => { col._sel?.classList.remove('sel'); col._sel = col.children[idx]; col._sel?.classList.add('sel'); };
-    return () => {
-      syncing = true;
-      colEls.forEach((col, i) => { col._idx = clockPick[i]; col.scrollTop = col._idx * IH; mark(col, col._idx); });
-      setTimeout(() => { syncing = false; }, 200);
-    };
+    syncClock();
   }
-  const syncClock = wheel($('wClock'), [{ max: 23, unit: '時' }, { max: 59, unit: '分' }]);
+  function syncClock() {
+    syncing = true;
+    colEls.forEach((col) => { col._idx = col._c.get(); col.scrollTop = col._idx * IH; mark(col, col._idx); });
+    setTimeout(() => { syncing = false; }, 200);
+  }
+
+  // 12 / 24 hour toggle
+  function renderHourFormat() {
+    const seg = $('hSeg');
+    seg.replaceChildren(...[['24', '24 小時'], ['12', '12 小時']].map(([v, text]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = text; b.setAttribute('aria-pressed', String(cfg.h24 === v));
+      b.onclick = () => { cfg.h24 = v; save(); renderHourFormat(); buildClock(); tick(); };
+      return b;
+    }));
+  }
 
   /* ---------- Voice ----------
      Every announcement is pre-scheduled on the Web Audio clock, which runs on the audio thread:
@@ -528,7 +562,14 @@
     parts.push([parts.length ? p2(s) : s, '秒']);
     return { html: parts.map(([n, u2]) => `${n}<i>${u2}</i>`).join(''), long: h > 0 };
   }
-  const clockStr = (d, secs) => `${p2(d.getHours())}:${p2(d.getMinutes())}${secs ? ':' + p2(d.getSeconds()) : ''}`;
+  // clock times honour the 12 / 24 hour setting
+  function clockHTML(d, secs) {
+    const hh = d.getHours();
+    const tail = `:${p2(d.getMinutes())}${secs ? ':' + p2(d.getSeconds()) : ''}`;
+    if (cfg.h24 === '24') return p2(hh) + tail;
+    return `<i class="ap">${hh >= 12 ? '下午' : '上午'}</i>${hh % 12 || 12}${tail}`;
+  }
+  const setHTML = (el, h) => { if (el.dataset.h !== h) { el.innerHTML = h; el.dataset.h = h; } };
   const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   function dayLabel(target, now) {
     const n = Math.round((dayStart(new Date(target)) - dayStart(new Date(now))) / 86400000);
@@ -602,7 +643,7 @@
 
   function tick() {
     const now = Date.now();
-    setText(els.nowT, clockStr(new Date(now), true));
+    setHTML(els.nowT, clockHTML(new Date(now), true));
     let tgt = target;
     if (st === 'idle') tgt = targetFor(now);
     const R = paused ? pausedMs / 1000 : (tgt - now) / 1000;
@@ -636,7 +677,7 @@
   function render(R, tgt, now) {
     const dur = cfg.mode === 'dur';
     const emptyDur = st === 'idle' && dur && !durTotal;
-    setText(els.tgtT, emptyDur ? '--:--:--' : clockStr(new Date(tgt), dur));
+    setHTML(els.tgtT, emptyDur ? '--:--:--' : clockHTML(new Date(tgt), dur));
     const day = emptyDur ? '' : dayLabel(tgt, now).trim();
     setText(els.tgtLabel, '目標時間' + (day ? ` · ${day}` : ''));
     $('lineDiff').classList.toggle('hero', dur);      // countdown mode: the difference is the hero
@@ -707,8 +748,9 @@
   /* ---------- Init ---------- */
   renderOptions();
   renderDur();
+  renderHourFormat();
+  buildClock();
   renderMode();
-  syncClock();
   setUI();
   tick();
   setInterval(tick, 100);
