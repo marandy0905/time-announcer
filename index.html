@@ -819,10 +819,20 @@
       }, 1300);
     } else mine.pause();
   }
+  let podResume = false;                            // the podcast was playing when the timer was paused
   function togglePause() {
     const t = Date.now();
-    if (!paused) { pausedMs = target - t; paused = true; stopAll(); }
-    else { target = t + pausedMs; paused = false; stopWall = computeStop(); unlockAudio(); scheduleAhead(); }
+    if (!paused) {
+      pausedMs = target - t; paused = true; stopAll();
+      podResume = !!(pod && (!pod.paused || podHeld));
+      podHeld = false;
+      if (pod && !pod.paused) pod.pause();
+      if (podGain && ctx) { podGain.gain.cancelScheduledValues(ctx.currentTime); podGain.gain.setValueAtTime(1, ctx.currentTime); }
+    } else {
+      target = t + pausedMs; paused = false; stopWall = computeStop(); unlockAudio(); scheduleAhead();
+      if (podResume && pod) pod.play().catch(() => {});
+      podResume = false;
+    }
     setUI(); tick();
   }
 
@@ -1065,7 +1075,8 @@
     if (cors) a.crossOrigin = 'anonymous';
     a.src = url; a.playbackRate = ps.rate;
     pod = a; bindPod(a);
-    a.addEventListener('loadedmetadata', () => { if (pos) a.currentTime = pos; if (cors) wirePod(a); }, { once: true });
+    if (!pos) a._seeked = true;
+    a.addEventListener('loadedmetadata', () => { if (pos) a.currentTime = pos; a._seeked = true; if (cors) wirePod(a); }, { once: true });
     // the host refused a CORS request: play it plainly, without fades
     a.addEventListener('error', () => { if (cors && pod === a && !a.duration) { corsHosts.set(originOf(url), false); makePod(url, pos, autoplay, false); } }, { once: true });
     if (autoplay) a.play().catch(() => {});
@@ -1111,15 +1122,19 @@
     $('ppIcon').innerHTML = (pod.paused && !podHeld) ? PLAY : PAUSE;
     $('ppPlay').setAttribute('aria-label', pod.paused && !podHeld ? '播放' : '暫停');
     const d = isFinite(pod.duration) ? pod.duration : 0;
-    $('ppSeek').max = d || 0; $('ppSeek').disabled = !d;
-    if (!seeking) { $('ppSeek').value = pod.currentTime || 0; setText($('ppCur'), mmss(pod.currentTime)); }
-    setText($('ppDur'), d ? mmss(d) : '--:--');
+    const loaded = pod.readyState >= 1;
+    const t = loaded ? pod.currentTime : (ps.cur && ps.cur.pos) || 0;     // until it loads, show where we left off
+    const dd = d || (!loaded && ps.cur && ps.cur.dur) || 0;
+    $('ppSeek').max = dd || 0; $('ppSeek').disabled = !d;
+    if (!seeking) { $('ppSeek').value = t; setText($('ppCur'), mmss(t)); }
+    setText($('ppDur'), dd ? mmss(dd) : '--:--');
   }
   function bindPod(a) {
     ['timeupdate', 'play', 'pause', 'durationchange', 'loadedmetadata', 'ended'].forEach((ev) => a.addEventListener(ev, () => {
       if (pod !== a) return;
       syncPlayer();
-      if (ps.cur && (ev !== 'timeupdate' || Date.now() - lastSave > 5000)) { ps.cur.pos = a.currentTime; lastSave = Date.now(); savePod(); }
+      if (isFinite(a.duration) && ps.cur) ps.cur.dur = a.duration;
+      if (ps.cur && a._seeked && (ev !== 'timeupdate' || Date.now() - lastSave > 5000)) { ps.cur.pos = a.currentTime; lastSave = Date.now(); savePod(); }
     }));
   }
   $('ppPlay').onclick = () => {
@@ -1148,6 +1163,9 @@
     h('seekbackward', () => { if (pod) pod.currentTime = Math.max(0, pod.currentTime - 15); });
     h('seekforward', () => { if (pod) pod.currentTime += 30; });
   }
+  const flushPos = () => { if (pod && ps.cur && pod._seeked) { ps.cur.pos = pod.currentTime; savePod(); } };
+  window.addEventListener('pagehide', flushPos);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushPos(); });
   renderRecent(); restorePlayer();
 
   /* ---------- Init ---------- */
