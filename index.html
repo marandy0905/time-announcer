@@ -693,7 +693,7 @@
 
   function tick() {
     const now = Date.now();
-    setHTML(els.nowT, clockHTML(new Date(now), true));
+    setHTML(els.nowT, clockHTML(new Date(now), false));
     let tgt = target;
     if (st === 'idle') tgt = targetFor(now);
     const R = paused ? pausedMs / 1000 : (tgt - now) / 1000;
