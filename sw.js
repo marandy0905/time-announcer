@@ -1,5 +1,5 @@
 // Offline support. HTML is network-first (so deploys show up immediately); audio and icons are cache-first.
-const CACHE = 'announcer-v2';
+const CACHE = 'announcer-v3';
 const range = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1));
 const clips = [
   ...range(60, (i) => `audio/n${i}.mp3`), 'audio/timeup.mp3',

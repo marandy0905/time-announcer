@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>剩餘時間報時</title>
+<title>times up!</title>
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="報時">
+<meta name="apple-mobile-web-app-title" content="times up!">
 <style>
   :root {
     --bg: #f2f2f7;
@@ -310,7 +310,6 @@
     <div class="recent" id="podRecent"></div>
     <div id="podHead" class="pod-head" hidden><button type="button" class="pod-back" id="podBack">‹ 返回</button><b id="podShow"></b></div>
     <div class="plist" id="podList"></div>
-    <audio id="pod" preload="none" playsinline></audio>
   </section>
 
   <section class="card panel" id="opts">
@@ -613,6 +612,7 @@
     if (ctx && ctx.state !== 'running') {          // still stuck: start over with a fresh audio context
       try { await ctx.close(); } catch {}
       ctx = null; audioCtx();
+      rebuildPod();                                // the podcast was wired to the old context
       await new Promise((ok) => setTimeout(ok, 250));
     }
     stopAll(); scheduleAhead();
@@ -890,19 +890,53 @@
   /* ---------- Podcast ----------
      Played by this page itself, so it shares one audio session with the announcements:
      both keep going in the background, and the podcast just steps aside while a phrase is spoken. */
-  const pod = $('pod');
+  let pod = null, podGain = null, podNode = null;   // one <audio> per episode (a media element can be wired to Web Audio only once)
   const PKEY = 'time-announcer-pod-v1';
   const ps = { recent: [], cur: null, rate: 1 };
   try { Object.assign(ps, JSON.parse(localStorage.getItem(PKEY) || '{}')); } catch {}
   const savePod = () => { try { localStorage.setItem(PKEY, JSON.stringify(ps)); } catch {} };
   let podHeld = false;                              // true while WE paused it for an announcement
+  const FADE_OUT = 0.3, FADE_IN = 0.6;
 
+  // Fade the podcast out, hold it paused while a phrase is spoken, then fade it back in.
   function duckPod(now) {
-    if (!pod.src) return;
+    if (!pod || !pod.src) return;
     windows = windows.filter((w) => w.to > now - 1000);
     const inside = windows.some((w) => now >= w.from && now <= w.to);
-    if (inside && !pod.paused && !podHeld) { podHeld = true; pod.pause(); }
-    else if (!inside && podHeld) { podHeld = false; pod.play().catch(() => {}); }
+    if (inside && !pod.paused && !podHeld) {
+      podHeld = true;
+      if (podGain && ctx) {
+        const t = ctx.currentTime, g = podGain.gain;
+        g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0.0001, t + FADE_OUT);
+        const mine = pod;
+        setTimeout(() => { if (podHeld && pod === mine) mine.pause(); }, FADE_OUT * 1000 + 30);
+      } else pod.pause();                           // no gain node (host without CORS): just pause
+    } else if (!inside && podHeld) {
+      podHeld = false;
+      pod.play().catch(() => {});
+      if (podGain && ctx) {
+        const t = ctx.currentTime, g = podGain.gain;
+        g.cancelScheduledValues(t); g.setValueAtTime(0.0001, t); g.linearRampToValueAtTime(1, t + FADE_IN);
+        const mine = pod;                           // safety net: never leave the podcast stuck at silence
+        setTimeout(() => { if (!podHeld && pod === mine && podGain && ctx) { const n = ctx.currentTime; podGain.gain.cancelScheduledValues(n); podGain.gain.setValueAtTime(1, n); } }, (FADE_IN + 0.25) * 1000);
+      }
+    }
+  }
+  function wirePod(a) {                             // only possible when the host allows CORS; otherwise the sound would be muted
+    if (pod !== a) return;
+    const c = audioCtx();
+    if (!c) return;
+    try {
+      podNode = c.createMediaElementSource(a); podGain = c.createGain();
+      podNode.connect(podGain); podGain.connect(c.destination);
+    } catch { podGain = null; podNode = null; }
+  }
+  const corsHosts = new Map();                      // origin -> does the audio host allow CORS (probed when a show is opened)
+  const originOf = (u) => { try { return new URL(u).origin; } catch { return ''; } };
+  async function probeCors(url) {
+    const o = originOf(url);
+    if (!o || corsHosts.has(o)) return;
+    try { await fetch(url, { method: 'HEAD', mode: 'cors' }); corsHosts.set(o, true); } catch { corsHosts.set(o, false); }
   }
 
   const API = 'https://itunes.apple.com';
@@ -944,6 +978,7 @@
       const d = await r.json();
       const eps = d.results.filter((x) => x.kind === 'podcast-episode' && x.episodeUrl);
       if (!eps.length) return note('這個節目沒有可以播放的單集');
+      probeCors(eps[0].episodeUrl);
       $list.replaceChildren(...eps.map((e) => {
         const date = new Date(e.releaseDate);
         const meta = `${date.getMonth() + 1}/${date.getDate()}` + (e.trackTimeMillis ? ` · ${Math.round(e.trackTimeMillis / 60000)} 分` : '');
@@ -967,15 +1002,26 @@
     }));
   }
 
+  function makePod(url, pos, autoplay, cors) {
+    if (pod) { const old = pod; pod = null; old.pause(); old.removeAttribute('src'); old.load(); }
+    podHeld = false; podGain = null; podNode = null;
+    const a = new Audio();
+    a.preload = autoplay ? 'auto' : 'metadata'; a.playsInline = true;
+    if (cors) a.crossOrigin = 'anonymous';
+    a.src = url; a.playbackRate = ps.rate;
+    pod = a; bindPod(a);
+    a.addEventListener('loadedmetadata', () => { if (pos) a.currentTime = pos; if (cors) wirePod(a); }, { once: true });
+    // the host refused a CORS request: play it plainly, without fades
+    a.addEventListener('error', () => { if (cors && pod === a && !a.duration) { corsHosts.set(originOf(url), false); makePod(url, pos, autoplay, false); } }, { once: true });
+    if (autoplay) a.play().catch(() => {});
+    syncPlayer();
+  }
   function playEpisode(show, ep, pos) {
     unlockAudio();                                  // also warms the audio context inside the tap
     ps.cur = { show, ep, pos };
     ps.recent = [show, ...ps.recent.filter((x) => x.id !== show.id)].slice(0, 6);
     savePod(); renderRecent();
-    podHeld = false;
-    pod.src = ep.url; pod.playbackRate = ps.rate;
-    pod.onloadedmetadata = () => { if (pos) pod.currentTime = pos; pod.onloadedmetadata = null; };
-    pod.play().catch(() => {});
+    makePod(ep.url, pos, true, corsHosts.get(originOf(ep.url)) !== false);
     showPlayer();
     if ('mediaSession' in navigator) {
       try {
@@ -986,9 +1032,13 @@
   }
   function restorePlayer() {                        // last episode comes back paused, at its position
     if (!ps.cur) return;
-    pod.src = ps.cur.ep.url; pod.playbackRate = ps.rate;
-    pod.onloadedmetadata = () => { if (ps.cur.pos) pod.currentTime = ps.cur.pos; pod.onloadedmetadata = null; };
+    makePod(ps.cur.ep.url, ps.cur.pos, false, corsHosts.get(originOf(ps.cur.ep.url)) !== false);
     showPlayer();
+  }
+  function rebuildPod() {                           // the audio context was replaced: re-wire the same episode
+    if (!pod || !ps.cur) return;
+    const playing = !pod.paused, pos = pod.currentTime;
+    makePod(ps.cur.ep.url, pos, playing, corsHosts.get(originOf(ps.cur.ep.url)) !== false);
   }
   function showPlayer() {
     $('pp').hidden = false;
@@ -1002,6 +1052,7 @@
   const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
   let seeking = false, lastSave = 0;
   function syncPlayer() {
+    if (!pod) return;
     $('ppIcon').innerHTML = (pod.paused && !podHeld) ? PLAY : PAUSE;
     $('ppPlay').setAttribute('aria-label', pod.paused && !podHeld ? '播放' : '暫停');
     const d = isFinite(pod.duration) ? pod.duration : 0;
@@ -1009,30 +1060,38 @@
     if (!seeking) { $('ppSeek').value = pod.currentTime || 0; setText($('ppCur'), mmss(pod.currentTime)); }
     setText($('ppDur'), d ? mmss(d) : '--:--');
   }
-  ['timeupdate', 'play', 'pause', 'durationchange', 'loadedmetadata', 'ended'].forEach((ev) => pod.addEventListener(ev, () => {
-    syncPlayer();
-    if (ps.cur && (ev !== 'timeupdate' || Date.now() - lastSave > 5000)) { ps.cur.pos = pod.currentTime; lastSave = Date.now(); savePod(); }
-  }));
+  function bindPod(a) {
+    ['timeupdate', 'play', 'pause', 'durationchange', 'loadedmetadata', 'ended'].forEach((ev) => a.addEventListener(ev, () => {
+      if (pod !== a) return;
+      syncPlayer();
+      if (ps.cur && (ev !== 'timeupdate' || Date.now() - lastSave > 5000)) { ps.cur.pos = a.currentTime; lastSave = Date.now(); savePod(); }
+    }));
+  }
   $('ppPlay').onclick = () => {
-    if (!ps.cur) return;
-    if (podHeld) { podHeld = false; return; }       // pressed while an announcement was speaking: stay paused
+    if (!ps.cur || !pod) return;
+    if (podHeld) {                                  // pressed while an announcement was speaking: stay paused
+      podHeld = false; pod.pause();
+      if (podGain && ctx) { podGain.gain.cancelScheduledValues(ctx.currentTime); podGain.gain.setValueAtTime(1, ctx.currentTime); }
+      return;
+    }
     unlockAudio();
     if (pod.paused) pod.play().catch(() => {}); else pod.pause();
   };
-  $('ppBack').onclick = () => { pod.currentTime = Math.max(0, pod.currentTime - 15); };
-  $('ppFwd').onclick = () => { pod.currentTime = Math.min(pod.duration || Infinity, pod.currentTime + 30); };
+  $('ppBack').onclick = () => { if (pod) pod.currentTime = Math.max(0, pod.currentTime - 15); };
+  $('ppFwd').onclick = () => { if (pod) pod.currentTime = Math.min(pod.duration || Infinity, pod.currentTime + 30); };
   $('ppRate').onclick = () => {
     const rates = [1, 1.25, 1.5, 2];
     ps.rate = rates[(rates.indexOf(ps.rate) + 1) % rates.length] || 1;
-    pod.playbackRate = ps.rate; $('ppRate').textContent = ps.rate + '×'; savePod();
+    if (pod) pod.playbackRate = ps.rate;
+    $('ppRate').textContent = ps.rate + '×'; savePod();
   };
   $('ppSeek').addEventListener('input', () => { seeking = true; setText($('ppCur'), mmss($('ppSeek').value)); });
-  $('ppSeek').addEventListener('change', () => { pod.currentTime = Number($('ppSeek').value); seeking = false; });
+  $('ppSeek').addEventListener('change', () => { if (pod) pod.currentTime = Number($('ppSeek').value); seeking = false; });
   if ('mediaSession' in navigator) {
     const h = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch {} };
-    h('play', () => pod.play()); h('pause', () => pod.pause());
-    h('seekbackward', () => { pod.currentTime = Math.max(0, pod.currentTime - 15); });
-    h('seekforward', () => { pod.currentTime += 30; });
+    h('play', () => pod && pod.play()); h('pause', () => pod && pod.pause());
+    h('seekbackward', () => { if (pod) pod.currentTime = Math.max(0, pod.currentTime - 15); });
+    h('seekforward', () => { if (pod) pod.currentTime += 30; });
   }
   renderRecent(); restorePlayer();
 
