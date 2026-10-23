@@ -73,6 +73,8 @@
   .line.hero small { color: var(--accent); font-weight: 600; font-size: 0.95rem; transition: color 0.5s ease; }
   .line.hero .val { font-size: clamp(3.2rem, 17vw, 4.6rem); line-height: 1.05; letter-spacing: -0.035em; color: var(--accent); }
   .line.hero .val.long { font-size: clamp(2.6rem, 13.5vw, 3.8rem); }
+  .val i { font-style: normal; font-size: 0.5em; font-weight: 500; margin: 0 0.3em 0 0.1em; opacity: 0.6; letter-spacing: 0; }
+  .val i:last-child { margin-right: 0; }
   .note { display: block; font-size: 0.85rem; color: var(--text-2); }
   .line.hero .note { min-height: 1.3em; margin-top: 0.1rem; }
   .controls { display: flex; justify-content: center; gap: 0.75rem; margin-top: 0.7rem; }
@@ -516,11 +518,16 @@
   const endPhrase = () => ({ clips: ['timeup'], text: '時間到' });
 
   /* ---------- Clock + schedule ---------- */
-  const fmtHMS = (t) => {
+  // Spelled out with units so it can't be mistaken for a clock time: 23 分 59 秒
+  function fmtDiff(t) {
     t = Math.max(0, Math.floor(t));
     const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60;
-    return h ? `${h}:${p2(m)}:${p2(s)}` : `${p2(m)}:${p2(s)}`;
-  };
+    const parts = [];
+    if (h) parts.push([h, '時']);
+    if (h || m) parts.push([parts.length ? p2(m) : m, '分']);
+    parts.push([parts.length ? p2(s) : s, '秒']);
+    return { html: parts.map(([n, u2]) => `${n}<i>${u2}</i>`).join(''), long: h > 0 };
+  }
   const clockStr = (d, secs) => `${p2(d.getHours())}:${p2(d.getMinutes())}${secs ? ':' + p2(d.getSeconds()) : ''}`;
   const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   function dayLabel(target, now) {
@@ -635,24 +642,25 @@
     $('lineDiff').classList.toggle('hero', dur);      // countdown mode: the difference is the hero
     $('lineTgt').classList.toggle('hero', !dur);      // clock mode: the target is
 
-    let accent = 'idle', phase, timeStr, note = ' ';
+    let accent = 'idle', phase, diff, note = ' ';
     if (st === 'idle') {
       phase = dur ? '倒數時間' : '距離目標';
-      timeStr = fmtHMS(Math.ceil(R));
+      diff = fmtDiff(Math.ceil(R));
       els.hint.textContent = '';
     } else if (st === 'run') {
       accent = 'run'; phase = paused ? '已暫停' : '剩餘時間';
-      timeStr = fmtHMS(Math.ceil(R));
-      note = `共 ${fmtHMS(total)}`;
+      diff = fmtDiff(Math.ceil(R));
+      note = `共 ${humanDur(Math.round(total))}`;
     } else if (st === 'over') {
-      accent = 'over'; phase = '已超過'; timeStr = '+' + fmtHMS(-R);
+      accent = 'over'; phase = '已超過'; diff = fmtDiff(-R);
       note = cfg.cont === 'say' ? '持續報時中' : '持續計時中';
     } else {
-      accent = 'done'; phase = '時間到'; timeStr = '00:00';
+      accent = 'done'; phase = '時間到'; diff = fmtDiff(0);
     }
-    setText(els.phase, phase); setText(els.time, timeStr); setText(els.note, note);
-    els.time.classList.toggle('long', timeStr.length >= 7);
     if (!dur) note = ' ';
+    setText(els.phase, phase); setText(els.note, note);
+    if (els.time.dataset.h !== diff.html) { els.time.innerHTML = diff.html; els.time.dataset.h = diff.html; }
+    els.time.classList.toggle('long', diff.long);
     root.style.setProperty('--accent', { idle: 'var(--blue)', run: 'var(--green)', over: 'var(--orange)', done: 'var(--red)' }[accent]);
     els.main.disabled = st === 'idle' && dur && !durTotal;
   }
