@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>剩餘時間報時</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="報時">
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --card: rgba(255, 255, 255, 0.72);
+    --card-border: rgba(255, 255, 255, 0.6);
+    --text: #1c1c1e;
+    --text-2: #6e6e73;
+    --track: rgba(60, 60, 67, 0.12);
+    --fill: rgba(120, 120, 128, 0.16);
+    --blue: #0a84ff;
+    --orange: #ff9f0a;
+    --green: #30d158;
+    --red: #ff453a;
+    --accent: var(--blue);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000;
+      --card: rgba(44, 44, 46, 0.66);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text: #f5f5f7;
+      --text-2: #98989f;
+      --track: rgba(235, 235, 245, 0.14);
+      --fill: rgba(120, 120, 128, 0.32);
+    }
+  }
+  @media (prefers-contrast: more) { :root { --card: var(--bg); --card-border: var(--text-2); } }
+  @media (prefers-reduced-transparency: reduce) { .card { background: var(--bg) !important; backdrop-filter: none !important; } }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; } /* no double-tap zoom */
+  html, body { min-height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 100%/1.5 system-ui, -apple-system, "SF Pro Text", "PingFang TC", sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    display: flex; justify-content: center;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+    transition: background 0.8s ease;
+  }
+  main { position: relative; width: min(100%, 26rem); display: grid; gap: 1rem; align-content: start; }
+  .card {
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 1.75rem;
+    backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+  }
+  .locked { opacity: 0.5; pointer-events: none; }
+  [hidden] { display: none !important; }
+
+  /* ---------- Dial ---------- */
+  .dial { padding: 1.5rem 1.25rem 1.25rem; text-align: center; }
+  .ring-wrap { position: relative; width: min(66vw, 16rem); aspect-ratio: 1; margin: 0 auto; }
+  svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .track, .bar { fill: none; stroke-width: 10; }
+  .track { stroke: var(--track); }
+  .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke 0.5s ease; }
+  .readout { position: absolute; inset: 0; display: grid; place-content: center; gap: 0.1rem; }
+  .phase { font-size: 0.95rem; font-weight: 600; color: var(--accent); transition: color 0.5s ease; }
+  .time { font-size: clamp(2.6rem, 12.5vw, 3.6rem); font-weight: 600; line-height: 1.05; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .time.long { font-size: clamp(2.1rem, 10vw, 3rem); }
+  .note { font-size: 0.85rem; color: var(--text-2); }
+  .clocks { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1.25rem; }
+  .clocks div { background: var(--fill); border-radius: 1rem; padding: 0.55rem 0.5rem; }
+  .clocks small { display: block; color: var(--text-2); font-size: 0.75rem; }
+  .clocks b { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .controls { display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.25rem; }
+  .btn {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 1.05rem;
+    min-width: 7rem; padding: 0.85rem 1.5rem; border-radius: 999px; background: var(--fill); color: var(--text);
+    transition: transform 120ms ease-out, opacity 120ms ease-out, background-color 0.3s;
+  }
+  .btn:active { transform: scale(0.96); opacity: 0.8; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn:disabled { opacity: 0.35; pointer-events: none; }
+  .btn:focus-visible, .col:focus-visible, .seg button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+
+  /* ---------- Settings ---------- */
+  .panel { padding: 1rem 1.25rem; --ih: 44px; }
+  .panel h2 { margin: 0 0 0.6rem; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+  .group { padding: 0.8rem 0; }
+  .group + .group { border-top: 1px solid var(--track); }
+  .group:last-child { padding-bottom: 0.2rem; }
+  .group .label { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; margin-bottom: 0.45rem; }
+  .group .label b { font-weight: 600; font-size: 0.95rem; }
+  .group .label small { color: var(--text-2); font-size: 0.78rem; }
+  .seg { display: flex; gap: 2px; padding: 2px; background: var(--fill); border-radius: 0.7rem; }
+  .seg button {
+    flex: 1; min-width: 0; appearance: none; border: 0; cursor: pointer; font: inherit; font-size: 0.85rem; font-weight: 500;
+    padding: 0.45rem 0.1rem; border-radius: 0.55rem; background: transparent; color: var(--text);
+    transition: background-color 0.25s, color 0.25s, transform 100ms ease-out; white-space: nowrap;
+  }
+  .seg button:active { transform: scale(0.95); }
+  .seg button[aria-pressed="true"] { background: var(--card-solid, #fff); font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+  :root { --card-solid: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --card-solid: #636366; } }
+  .seg.mode { margin-bottom: 0.4rem; }
+
+  /* Wheel picker (native scroll-snap) */
+  .wheel { position: relative; display: flex; justify-content: center; gap: 0.5rem; padding: 0.25rem 0 0.25rem; }
+  .wheel::before {
+    content: ""; position: absolute; left: 0; right: 0; top: calc(0.25rem + var(--ih) * 2); height: var(--ih);
+    background: var(--fill); border-radius: 0.7rem;
+  }
+  .col {
+    position: relative; width: 5rem; height: calc(var(--ih) * 5); padding-block: calc(var(--ih) * 2);
+    overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain;
+    touch-action: pan-y; cursor: grab; outline-offset: -2px; border-radius: 0.7rem;
+    -webkit-mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
+            mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
+  }
+  .col::-webkit-scrollbar { display: none; }
+  .opt {
+    height: var(--ih); scroll-snap-align: center; scroll-snap-stop: always;
+    display: flex; align-items: center; justify-content: center; gap: 0.2rem;
+    font-size: 1.35rem; font-variant-numeric: tabular-nums; color: var(--text-2); transition: color 0.15s;
+  }
+  .opt small { font-size: 0.8rem; font-weight: 500; }
+  .opt.sel { color: var(--text); font-weight: 600; }
+  .hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.8rem; color: var(--text-2); min-height: 1.2em; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <section class="card dial" aria-live="off">
+    <div class="ring-wrap">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="track" cx="50" cy="50" r="45"/>
+        <circle class="bar" id="bar" cx="50" cy="50" r="45"/>
+      </svg>
+      <div class="readout">
+        <div class="phase" id="phase">倒數時間</div>
+        <div class="time" id="time">00:10:00</div>
+        <div class="note" id="note"> </div>
+      </div>
+    </div>
+    <div class="clocks">
+      <div><small>現在</small><b id="nowT">--:--:--</b></div>
+      <div><small id="tgtLabel">目標</small><b id="tgtT">--:--</b></div>
+    </div>
+    <div class="controls">
+      <button class="btn" id="sec" hidden>結束</button>
+      <button class="btn primary" id="main">開始</button>
+    </div>
+  </section>
+
+  <section class="card panel" id="setup">
+    <h2>目標時間</h2>
+    <div class="seg mode" id="modeSeg" role="group" aria-label="設定模式">
+      <button type="button" data-v="clock">幾點幾分</button>
+      <button type="button" data-v="dur">倒數多久</button>
+    </div>
+    <div class="wheel" id="wClock"></div>
+    <div class="wheel" id="wDur" hidden></div>
+    <p class="hint" id="hint"></p>
+  </section>
+
+  <section class="card panel" id="opts">
+    <h2>語音報時</h2>
+    <div id="optList"></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
+  const els = {
+    bar: $('bar'), phase: $('phase'), time: $('time'), note: $('note'), nowT: $('nowT'), tgtT: $('tgtT'),
+    tgtLabel: $('tgtLabel'), main: $('main'), sec: $('sec'), setup: $('setup'), opts: $('opts'), hint: $('hint'),
+  };
+  const C = 2 * Math.PI * 45;
+  els.bar.style.strokeDasharray = C;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const p2 = (n) => String(n).padStart(2, '0');
+
+  /* ---------- Settings ---------- */
+  const KEY = 'time-announcer-v1';
+  const now0 = new Date(Date.now() + 30 * 60000);
+  const cfg = {
+    mode: 'clock',
+    clock: [now0.getHours(), Math.ceil(now0.getMinutes() / 5) * 5 % 60],
+    dur: [0, 10, 0],
+    sec: 10, min: 60, mid: 600, hour: 1800,   // report interval per remaining-time range, in seconds (0 = off)
+    count: 10,                                 // per-second countdown starts at N seconds left (0 = off)
+    cont: 'say',                               // after the target: stop | run | say
+    overIv: 60,                                // seconds between 「超過…」 reports
+  };
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
+
+  const OPTIONS = [
+    { key: 'sec',  title: '剩餘不到 1 分鐘', sub: '每隔多久報時（秒）',
+      opts: [[0, '關閉'], [5, '5 秒'], [10, '10 秒'], [15, '15 秒'], [30, '30 秒']] },
+    { key: 'min',  title: '剩餘 1–10 分鐘', sub: '每隔多久報時',
+      opts: [[0, '關閉'], [60, '1 分'], [120, '2 分'], [300, '5 分']] },
+    { key: 'mid',  title: '剩餘 10–60 分鐘', sub: '每隔多久報時',
+      opts: [[0, '關閉'], [300, '5 分'], [600, '10 分'], [900, '15 分'], [1800, '30 分']] },
+    { key: 'hour', title: '剩餘超過 1 小時', sub: '每隔多久報時',
+      opts: [[0, '關閉'], [900, '15 分'], [1800, '30 分'], [3600, '1小時'], [7200, '2小時']] },
+    { key: 'count', title: '逐秒倒數', sub: '剩下幾秒時開始唸',
+      opts: [[0, '關閉'], [3, '3 秒'], [5, '5 秒'], [10, '10 秒'], [15, '15 秒'], [30, '30 秒']] },
+    { key: 'cont', title: '時間到之後', sub: '要不要繼續',
+      opts: [['stop', '停止'], ['run', '只計時'], ['say', '計時並報時']] },
+    { key: 'overIv', title: '「超過」報時間隔', sub: '時間到之後每隔多久報時', when: () => cfg.cont === 'say',
+      opts: [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [300, '5 分'], [600, '10 分']] },
+  ];
+
+  function segment(host, opts, current, onPick) {
+    host.className = 'seg'; host.setAttribute('role', 'group');
+    host.replaceChildren(...opts.map(([v, label]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = label; b.dataset.v = v;
+      b.setAttribute('aria-pressed', String(String(v) === String(current)));
+      b.onclick = () => onPick(v);
+      return b;
+    }));
+  }
+  const groups = OPTIONS.map((o) => {
+    const g = document.createElement('div');
+    g.className = 'group';
+    g.innerHTML = '<div class="label"><b></b><small></small></div><div></div>';
+    g.querySelector('b').textContent = o.title;
+    g.querySelector('small').textContent = o.sub;
+    $('optList').append(g);
+    return { o, g, seg: g.lastElementChild };
+  });
+  function renderOptions() {
+    groups.forEach(({ o, g, seg }) => {
+      g.hidden = o.when ? !o.when() : false;
+      segment(seg, o.opts, cfg[o.key], (v) => {
+        cfg[o.key] = typeof o.opts[0][0] === 'number' ? Number(v) : v;
+        save(); renderOptions();
+      });
+    });
+  }
+  function renderMode() {
+    [...$('modeSeg').children].forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === cfg.mode)));
+    $('wClock').hidden = cfg.mode !== 'clock';
+    $('wDur').hidden = cfg.mode !== 'dur';
+    tick();
+  }
+  [...$('modeSeg').children].forEach((b) => { b.onclick = () => { cfg.mode = b.dataset.v; save(); renderMode(); }; });
+
+  /* ---------- Wheel pickers ---------- */
+  const IH = 44;
+  function wheel(host, key, cols) {
+    const els2 = cols.map((c, ci) => {
+      const col = document.createElement('div');
+      col.className = 'col'; col.tabIndex = 0; col._idx = -1;
+      col.setAttribute('aria-label', c.unit);
+      const frag = document.createDocumentFragment();
+      for (let v = 0; v <= c.max; v++) {
+        const o = document.createElement('div');
+        o.className = 'opt'; o.innerHTML = `${p2(v)}<small>${c.unit}</small>`;
+        frag.append(o);
+      }
+      col.append(frag);
+      col.addEventListener('scroll', () => {
+        const idx = clamp(Math.round(col.scrollTop / IH), 0, c.max);
+        if (idx !== col._idx) {
+          col._idx = idx; mark(col, idx); buzz(4);
+          cfg[key][ci] = idx; save(); tick();
+        }
+      }, { passive: true });
+      col.addEventListener('click', (e) => {
+        const o = e.target.closest('.opt');
+        if (o) col.scrollTo({ top: [...col.children].indexOf(o) * IH, behavior: 'smooth' });
+      });
+      host.append(col);
+      return col;
+    });
+    const mark = (col, idx) => { col._sel?.classList.remove('sel'); col._sel = col.children[idx]; col._sel?.classList.add('sel'); };
+    return () => els2.forEach((col, i) => { col._idx = cfg[key][i]; col.scrollTop = col._idx * IH; mark(col, col._idx); });
+  }
+  const syncClock = wheel($('wClock'), 'clock', [{ max: 23, unit: '時' }, { max: 59, unit: '分' }]);
+  const syncDur = wheel($('wDur'), 'dur', [{ max: 23, unit: '時' }, { max: 59, unit: '分' }, { max: 59, unit: '秒' }]);
+
+  /* ---------- Voice: recorded clips via Web Audio, browser speech as fallback ---------- */
+  const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
+  const D = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  const zh = (n) => n < 10 ? D[n] : n < 20 ? '十' + D[n - 10] : D[Math.floor(n / 10)] + '十' + D[n % 10];
+  const u = (n) => (n === 2 ? '兩' : zh(n));
+
+  let ctx = null, seq = 0;
+  const active = new Set();
+  const decoded = new Map();
+  function audioCtx() {
+    try {
+      ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
+    } catch {}
+    return ctx;
+  }
+  function loadClip(name) {
+    if (!decoded.has(name)) {
+      decoded.set(name, fetch(`audio/${name}.mp3`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+        .then((b) => new Promise((ok, no) => audioCtx().decodeAudioData(b, ok, no)))
+        .catch(() => { decoded.delete(name); return null; }));
+    }
+    return decoded.get(name);
+  }
+  function stopAudio() {
+    active.forEach((s) => { s.onended = null; try { s.stop(); } catch {} });
+    active.clear();
+  }
+  let keepAlive = null;       // silent loop: keeps iOS in "playback" mode (ringer switch won't mute) and the page unthrottled
+  function unlockAudio() {
+    audioCtx();
+    if (keepAlive) return;
+    try {
+      const n = 8000, v = new DataView(new ArrayBuffer(44 + n));
+      const w = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+      w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true);
+      v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+      w(36, 'data'); v.setUint32(40, n, true);
+      for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+      keepAlive = new Audio(URL.createObjectURL(new Blob([v], { type: 'audio/wav' })));
+      keepAlive.loop = true; keepAlive.play().catch(() => {});
+    } catch {}
+  }
+  function speakFallback(text) {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      synth.cancel();
+      const ut = new SpeechSynthesisUtterance(text);
+      ut.lang = 'zh-TW'; ut.rate = 1.05;
+      const v = synth.getVoices().find((x) => /zh[-_]TW/i.test(x.lang)) || synth.getVoices().find((x) => /^zh/i.test(x.lang));
+      if (v) ut.voice = v;
+      synth.speak(ut);
+    } catch {}
+  }
+  async function say(p) {                           // p = { clips: [...], text }
+    if (!p) return;
+    const mine = ++seq;
+    stopAudio();
+    const bufs = await Promise.all(p.clips.map(loadClip));
+    if (mine !== seq) return;                       // superseded while loading
+    if (ctx && bufs.every(Boolean)) {
+      let at = ctx.currentTime + 0.01;
+      bufs.forEach((b) => {
+        const src = ctx.createBufferSource();
+        src.buffer = b; src.connect(ctx.destination); src.start(at);
+        at += b.duration + 0.03;
+        active.add(src); src.onended = () => active.delete(src);
+      });
+    } else speakFallback(p.text);
+  }
+  const stopSpeech = () => { seq++; stopAudio(); try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {} };
+
+  // 「剩餘…」 / 「超過…」: <1 min in seconds, <1 h in minutes, otherwise hours + minutes.
+  function phrase(sec, over) {
+    const s = over ? Math.floor(sec) : Math.round(sec);
+    const pre = over ? '超過' : '剩餘';
+    const k = over ? 'o' : '';
+    if (s < 1) return null;
+    if (s < 60) return { clips: [`${k}s${s}`], text: `${pre}${u(s)}秒` };
+    const M = over ? Math.floor(s / 60) : Math.round(s / 60);
+    const h = Math.floor(M / 60), m = M % 60;
+    if (!h) return { clips: [`${k}m${m}`], text: `${pre}${u(m)}分鐘` };
+    if (h > 24) return null;
+    return { clips: [`${k}h${h}`, ...(m ? [`mm${m}`] : [])], text: `${pre}${u(h)}小時${m ? u(m) + '分鐘' : ''}` };
+  }
+  const countPhrase = (n) => ({ clips: [`n${n}`], text: zh(n) });
+  const endPhrase = () => ({ clips: ['timeup'], text: '時間到' });
+
+  /* ---------- Clock + schedule ---------- */
+  const fmtHMS = (t) => {
+    t = Math.max(0, Math.floor(t));
+    const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60;
+    return h ? `${h}:${p2(m)}:${p2(s)}` : `${p2(m)}:${p2(s)}`;
+  };
+  const clockStr = (d, secs) => `${p2(d.getHours())}:${p2(d.getMinutes())}${secs ? ':' + p2(d.getSeconds()) : ''}`;
+  const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  function dayLabel(target, now) {
+    const n = Math.round((dayStart(new Date(target)) - dayStart(new Date(now))) / 86400000);
+    return n === 0 ? '' : n === 1 ? '明天 ' : n === 2 ? '後天 ' : `${n} 天後 `;
+  }
+  function targetFor(now) {
+    if (cfg.mode === 'dur') return now + (cfg.dur[0] * 3600 + cfg.dur[1] * 60 + cfg.dur[2]) * 1000;
+    const d = new Date(now);
+    d.setHours(cfg.clock[0], cfg.clock[1], 0, 0);
+    return d.getTime() <= now ? d.getTime() + 86400000 : d.getTime();
+  }
+
+  function buildMarks(R0) {
+    const T = cfg.count, out = [];
+    const ranges = [
+      { I: cfg.hour, has: (v) => v > 3600 },
+      { I: cfg.mid,  has: (v) => v > 600 && v <= 3600 },
+      { I: cfg.min,  has: (v) => v >= 60 && v <= 600 },
+      { I: cfg.sec,  has: (v) => v > 0 && v < 60 },
+    ];
+    ranges.forEach(({ I, has }) => {
+      if (!I) return;
+      for (let v = I; v < R0 - 0.5; v += I) if (has(v) && v > T) out.push({ t: v, type: 'report' });
+    });
+    for (let k = T; k >= 1; k--) if (k < R0 - 0.5) out.push({ t: k, type: 'count' });
+    out.push({ t: 0, type: 'end' });
+    return out.sort((a, b) => b.t - a.t);
+  }
+
+  /* ---------- State ---------- */
+  let st = 'idle';                 // idle | run | over | done
+  let target = 0, total = 1, paused = false, pausedMs = 0;
+  let marks = [], mi = 0, overNext = Infinity;
+
+  function start() {
+    unlockAudio();
+    const t0 = Date.now();
+    target = targetFor(t0);
+    const R0 = (target - t0) / 1000;
+    total = Math.max(1, R0);
+    marks = buildMarks(R0); mi = 0; paused = false; overNext = Infinity;
+    st = 'run';
+    // warm the clips this run will need, then announce the starting point
+    marks.forEach((m) => {
+      const p = m.type === 'report' ? phrase(m.t, false) : m.type === 'count' ? countPhrase(m.t) : endPhrase();
+      p && p.clips.forEach(loadClip);
+    });
+    say(phrase(R0, false));
+    setUI(); tick();
+  }
+  function finish() { stopSpeech(); st = 'idle'; paused = false; setUI(); tick(); }
+  function togglePause() {
+    const t = Date.now();
+    if (!paused) { pausedMs = target - t; paused = true; stopSpeech(); }
+    else { target = t + pausedMs; paused = false; }
+    setUI(); tick();
+  }
+
+  function fire(m, R) {
+    if (m.type === 'report') say(phrase(m.t, false));
+    else if (m.type === 'count') { if (R >= m.t - 1.5) say(countPhrase(m.t)); }
+    else {                                           // end
+      say(endPhrase()); buzz([120, 80, 120]);
+      if (cfg.cont === 'stop') st = 'done';
+      else { st = 'over'; overNext = cfg.cont === 'say' ? cfg.overIv : Infinity; }
+      setUI();
+    }
+  }
+
+  function tick() {
+    const now = Date.now();
+    const d = new Date(now);
+    setText(els.nowT, clockStr(d, true));
+
+    let R, tgt = target;
+    if (st === 'idle') tgt = targetFor(now);
+    if (st === 'idle' || st === 'run' || st === 'over' || st === 'done') {
+      R = paused ? pausedMs / 1000 : (tgt - now) / 1000;
+    }
+
+    if (st === 'run' && !paused) {
+      let due = null;
+      while (mi < marks.length && R <= marks[mi].t + 0.03) { due = marks[mi++]; if (due.type === 'end') break; }
+      if (due) fire(due, R);
+    } else if (st === 'over') {
+      const O = -R;
+      if (O >= overNext - 0.03) {
+        say(phrase(overNext, true));
+        while (O >= overNext - 0.03) overNext += cfg.overIv;
+      }
+    }
+    render(R, tgt, now);
+  }
+
+  const setText = (el, s) => { if (el.textContent !== s) el.textContent = s; };
+
+  function render(R, tgt, now) {
+    const dur = cfg.mode === 'dur';
+    setText(els.tgtT, dayLabel(tgt, now) + clockStr(new Date(tgt), dur));
+    setText(els.tgtLabel, '目標');
+
+    let accent = 'idle', phase, timeStr, note = ' ', offset;
+    if (st === 'idle') {
+      phase = dur ? '倒數時間' : '距離目標';
+      timeStr = fmtHMS(Math.ceil(R)); offset = 0;
+      els.hint.textContent = (dur && R < 1) ? '請設定大於 0 的時間' : '';
+    } else if (st === 'run') {
+      accent = 'run'; phase = paused ? '已暫停' : '剩餘時間';
+      timeStr = fmtHMS(Math.ceil(R)); offset = 1 - clamp(R / total, 0, 1);
+      note = `共 ${fmtHMS(total)}`;
+    } else if (st === 'over') {
+      accent = 'over'; phase = '已超過'; timeStr = '+' + fmtHMS(-R); offset = 0;
+      note = cfg.cont === 'say' ? '持續報時中' : '持續計時中';
+    } else {
+      accent = 'done'; phase = '時間到'; timeStr = '00:00'; offset = 0;
+    }
+    els.bar.style.strokeDashoffset = C * offset;
+    setText(els.phase, phase); setText(els.time, timeStr); setText(els.note, note);
+    els.time.classList.toggle('long', timeStr.length >= 7);
+    root.style.setProperty('--accent', { idle: 'var(--blue)', run: 'var(--green)', over: 'var(--orange)', done: 'var(--red)' }[accent]);
+    els.main.disabled = st === 'idle' && dur && R < 1;
+  }
+
+  function setUI() {
+    const busy = st === 'run' || st === 'over';
+    els.setup.classList.toggle('locked', busy);
+    els.opts.classList.toggle('locked', busy);
+    els.sec.hidden = !(st === 'run' && cfg.mode === 'dur');
+    els.sec.textContent = '結束';
+    els.main.textContent =
+      st === 'idle' ? '開始' :
+      st === 'done' ? '重設' :
+      st === 'over' ? '結束' :
+      cfg.mode === 'dur' ? (paused ? '繼續' : '暫停') : '結束';
+    syncWake();
+  }
+  els.main.onclick = () => {
+    if (st === 'idle') start();
+    else if (st === 'done' || st === 'over') finish();
+    else if (cfg.mode === 'dur') togglePause();
+    else finish();
+  };
+  els.sec.onclick = finish;
+  document.addEventListener('keydown', (e) => { if (e.code === 'Space' && !els.main.disabled) { e.preventDefault(); els.main.click(); } });
+
+  /* ---------- Keep the screen awake while counting ---------- */
+  let wake = null;
+  async function syncWake() {
+    const want = (st === 'run' || st === 'over') && !paused;
+    try {
+      if (want && !wake && navigator.wakeLock && !document.hidden) {
+        wake = await navigator.wakeLock.request('screen');
+        wake.addEventListener('release', () => { wake = null; });
+      } else if (!want && wake) { await wake.release(); wake = null; }
+    } catch { wake = null; }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncWake(); tick(); } });
+
+  /* ---------- Init ---------- */
+  renderOptions();
+  renderMode();
+  syncClock(); syncDur();
+  setUI();
+  tick();
+  setInterval(tick, 100);        // also runs in background tabs; the silent audio loop keeps it unthrottled
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
