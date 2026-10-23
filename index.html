@@ -806,9 +806,13 @@
     buzz([200, 100, 200]);
     setUI();
   }
-  function stopPodFade() {
-    if (!pod || pod.paused) return;
+  function stopPodFade() {                          // end the podcast for good (no auto-resume after announcements)
+    if (!pod) return;
     podHeld = false;
+    if (pod.paused) {                               // already paused (e.g. stepping aside): make sure its volume is back for a manual play
+      if (podGain && ctx) { podGain.gain.cancelScheduledValues(ctx.currentTime); podGain.gain.setValueAtTime(1, ctx.currentTime); }
+      return;
+    }
     const mine = pod;
     if (podGain && ctx) {
       const t = ctx.currentTime, g = podGain.gain;
@@ -846,6 +850,7 @@
 
     if (st === 'run' && !paused && R <= 0.03) {
       buzz([120, 80, 120]);
+      stopPodFade();                                // time is up: the podcast stops; only the announcements go on
       st = cfg.cont === 'stop' ? 'done' : 'over';
       setUI();
     }
