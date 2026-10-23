@@ -62,23 +62,18 @@
   .locked { opacity: 0.5; pointer-events: none; }
   [hidden] { display: none !important; }
 
-  /* ---------- Dial ---------- */
-  .dial { padding: 1.5rem 1.25rem 1.25rem; text-align: center; }
-  .ring-wrap { position: relative; width: min(66vw, 16rem); aspect-ratio: 1; margin: 0 auto; }
-  svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .track, .bar { fill: none; stroke-width: 10; }
-  .track { stroke: var(--track); }
-  .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke 0.5s ease; }
-  .readout { position: absolute; inset: 0; display: grid; place-content: center; gap: 0.1rem; }
-  .phase { font-size: 0.95rem; font-weight: 600; color: var(--accent); transition: color 0.5s ease; }
-  .time { font-size: clamp(2.6rem, 12.5vw, 3.6rem); font-weight: 600; line-height: 1.05; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .time.long { font-size: clamp(2.1rem, 10vw, 3rem); }
-  .note { font-size: 0.85rem; color: var(--text-2); }
-  .clocks { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1.25rem; }
-  .clocks div { background: var(--fill); border-radius: 1rem; padding: 0.55rem 0.5rem; }
-  .clocks small { display: block; color: var(--text-2); font-size: 0.75rem; }
-  .clocks b { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-  .controls { display: flex; justify-content: center; gap: 0.75rem; margin-top: 1.25rem; }
+  /* ---------- Dial: three lines, the difference is the hero ---------- */
+  .dial { padding: 0.6rem 1.25rem 1.25rem; text-align: center; }
+  .line { padding: 0.95rem 0; }
+  .line + .line { border-top: 1px solid var(--track); }
+  .line small { display: block; font-size: 0.8rem; font-weight: 500; color: var(--text-2); letter-spacing: 0.02em; }
+  .clock { display: block; font-size: 1.9rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .line.hero { padding: 1.15rem 0 1.05rem; }
+  .line.hero .phase { color: var(--accent); font-weight: 600; font-size: 0.95rem; transition: color 0.5s ease; }
+  .time { display: block; font-size: clamp(3.2rem, 17vw, 4.6rem); font-weight: 600; line-height: 1.05; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--accent); transition: color 0.5s ease; }
+  .time.long { font-size: clamp(2.6rem, 13.5vw, 3.8rem); }
+  .note { display: block; font-size: 0.85rem; color: var(--text-2); min-height: 1.3em; margin-top: 0.1rem; }
+  .controls { display: flex; justify-content: center; gap: 0.75rem; margin-top: 0.7rem; }
   .btn {
     appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 1.05rem;
     min-width: 7rem; padding: 0.85rem 1.5rem; border-radius: 999px; background: var(--fill); color: var(--text);
@@ -95,6 +90,8 @@
   .group { padding: 0.8rem 0; }
   .group + .group { border-top: 1px solid var(--track); }
   .group:last-child { padding-bottom: 0.2rem; }
+  .group + .group.joined { border-top: 0; padding-top: 0; }   /* part of the previous group */
+  .group:has(+ .group.joined:not([hidden])) { padding-bottom: 0.55rem; }
   .group .label { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; margin-bottom: 0.45rem; }
   .group .label b { font-weight: 600; font-size: 0.95rem; }
   .group .label small { color: var(--text-2); font-size: 0.78rem; }
@@ -177,20 +174,18 @@
 <body>
 <main>
   <section class="card dial" aria-live="off">
-    <div class="ring-wrap">
-      <svg viewBox="0 0 100 100" aria-hidden="true">
-        <circle class="track" cx="50" cy="50" r="45"/>
-        <circle class="bar" id="bar" cx="50" cy="50" r="45"/>
-      </svg>
-      <div class="readout">
-        <div class="phase" id="phase">倒數時間</div>
-        <div class="time" id="time">00:10:00</div>
-        <div class="note" id="note"> </div>
-      </div>
+    <div class="line">
+      <small>現在時間</small>
+      <b class="clock" id="nowT">--:--:--</b>
     </div>
-    <div class="clocks">
-      <div><small>現在</small><b id="nowT">--:--:--</b></div>
-      <div><small id="tgtLabel">目標</small><b id="tgtT">--:--</b></div>
+    <div class="line hero">
+      <small class="phase" id="phase">距離目標</small>
+      <b class="time" id="time">00:10:00</b>
+      <span class="note" id="note"> </span>
+    </div>
+    <div class="line">
+      <small id="tgtLabel">目標時間</small>
+      <b class="clock" id="tgtT">--:--</b>
     </div>
     <div class="controls">
       <button class="btn" id="sec" hidden>結束</button>
@@ -223,11 +218,9 @@
   const $ = (id) => document.getElementById(id);
   const root = document.documentElement;
   const els = {
-    bar: $('bar'), phase: $('phase'), time: $('time'), note: $('note'), nowT: $('nowT'), tgtT: $('tgtT'),
+    phase: $('phase'), time: $('time'), note: $('note'), nowT: $('nowT'), tgtT: $('tgtT'),
     tgtLabel: $('tgtLabel'), main: $('main'), sec: $('sec'), setup: $('setup'), opts: $('opts'), hint: $('hint'),
   };
-  const C = 2 * Math.PI * 45;
-  els.bar.style.strokeDasharray = C;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const p2 = (n) => String(n).padStart(2, '0');
   const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
@@ -245,12 +238,12 @@
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
 
-  // Not persisted: the clock picker starts at "now", the duration starts empty.
+  // Not persisted: the clock picker starts at now + 10 min, the duration starts empty.
   let clockPick = [0, 0], clockTouched = false;
   let durTotal = 0;
   const MAX_DUR = 24 * 3600;
   function clockToNow() {
-    const d = new Date();
+    const d = new Date(Date.now() + 10 * 60000);
     clockPick = [d.getHours(), d.getMinutes()];
   }
   clockToNow();
@@ -265,7 +258,7 @@
       opts: [[0, '關閉'], [3, '3 秒'], [5, '5 秒'], [10, '10 秒'], [15, '15 秒'], [30, '30 秒']] },
     cont: { title: '時間到之後', sub: '要不要繼續',
       opts: [['stop', '停止'], ['run', '只計時'], ['say', '計時並報時']] },
-    overIv: { title: '「超過」報時間隔', sub: '時間到之後每隔多久報時', when: () => cfg.cont === 'say',
+    overIv: { title: '時間到之後報時間隔', sub: '每隔多久', when: () => cfg.cont === 'say',
       opts: [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [300, '5 分'], [600, '10 分']] },
     mix: { title: '與音樂同時播放', sub: '縮小後沒聲音時改用獨佔',
       opts: [['mix', '混音'], ['solo', '獨佔']] },
@@ -295,6 +288,7 @@
   // Order: per-second countdown first, then the (collapsed) report intervals, then the rest.
   const list = $('optList');
   const simple = ['count', 'cont', 'overIv', 'mix'].map(group);
+  simple[2].g.classList.add('joined');
   const ivBox = document.createElement('div');
   ivBox.className = 'group';
   ivBox.innerHTML =
@@ -633,24 +627,23 @@
   function render(R, tgt, now) {
     const dur = cfg.mode === 'dur';
     setText(els.tgtT, (st === 'idle' && dur && !durTotal) ? '--:--:--' : dayLabel(tgt, now) + clockStr(new Date(tgt), dur));
-    setText(els.tgtLabel, '目標');
+    setText(els.tgtLabel, '目標時間');
 
-    let accent = 'idle', phase, timeStr, note = ' ', offset;
+    let accent = 'idle', phase, timeStr, note = ' ';
     if (st === 'idle') {
       phase = dur ? '倒數時間' : '距離目標';
-      timeStr = fmtHMS(Math.ceil(R)); offset = 0;
+      timeStr = fmtHMS(Math.ceil(R));
       els.hint.textContent = '';
     } else if (st === 'run') {
       accent = 'run'; phase = paused ? '已暫停' : '剩餘時間';
-      timeStr = fmtHMS(Math.ceil(R)); offset = 1 - clamp(R / total, 0, 1);
+      timeStr = fmtHMS(Math.ceil(R));
       note = `共 ${fmtHMS(total)}`;
     } else if (st === 'over') {
-      accent = 'over'; phase = '已超過'; timeStr = '+' + fmtHMS(-R); offset = 0;
+      accent = 'over'; phase = '已超過'; timeStr = '+' + fmtHMS(-R);
       note = cfg.cont === 'say' ? '持續報時中' : '持續計時中';
     } else {
-      accent = 'done'; phase = '時間到'; timeStr = '00:00'; offset = 0;
+      accent = 'done'; phase = '時間到'; timeStr = '00:00';
     }
-    els.bar.style.strokeDashoffset = C * offset;
     setText(els.phase, phase); setText(els.time, timeStr); setText(els.note, note);
     els.time.classList.toggle('long', timeStr.length >= 7);
     root.style.setProperty('--accent', { idle: 'var(--blue)', run: 'var(--green)', over: 'var(--orange)', done: 'var(--red)' }[accent]);
