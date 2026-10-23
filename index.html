@@ -141,6 +141,22 @@
   .opt.sel { color: var(--text); font-weight: 600; }
   .hint { margin: 0.4rem 0 0; text-align: center; font-size: 0.8rem; color: var(--text-2); min-height: 1.2em; }
 
+  /* audio-interrupted banner */
+  .fix {
+    position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.5rem 0.6rem 1.25rem; border-radius: 999px;
+    font-size: 0.95rem; font-weight: 500; background: var(--card); border: 1px solid var(--card-border);
+    backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); transform: translate(-50%, 220%); pointer-events: none;
+    transition: transform 0.45s cubic-bezier(0.32, 0.72, 0, 1); z-index: 5; white-space: nowrap;
+  }
+  .fix.show { transform: translate(-50%, 0); pointer-events: auto; }
+  .fix button {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; color: #fff; background: var(--orange);
+    padding: 0.5rem 1rem; border-radius: 999px; transition: transform 100ms ease-out;
+  }
+  .fix button:active { transform: scale(0.94); }
+
   /* disclosure */
   .disclose {
     appearance: none; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
@@ -223,6 +239,7 @@
     <div id="optList"></div>
   </section>
 </main>
+<div class="fix" id="fix" role="alert"><span>語音被系統中斷了</span><button type="button" id="fixBtn">恢復報時</button></div>
 
 <script>
 (() => {
@@ -245,9 +262,11 @@
     cont: 'say',                               // after the target: stop | run | say
     overIv: 60,                                // seconds between 「超過…」 reports
     h24: '24',                                 // clock format: 24 | 12
-    mix: 'mix',                                // mix: play on top of music/podcasts | solo: take over audio
+    mix: 'ambient',                            // ambient: mix with other apps | transient: laid on top (may duck) | playback: take over audio
   };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
+  cfg.mode = 'dur';                                            // always open on 「倒數多久」
+  cfg.mix = { mix: 'ambient', solo: 'playback' }[cfg.mix] || cfg.mix;   // older saved values
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
 
   // Not persisted: the clock picker starts at now + 10 min, the duration starts empty.
@@ -272,8 +291,8 @@
       opts: [['stop', '停止'], ['run', '只計時'], ['say', '計時並報時']] },
     overIv: { title: '時間到之後報時間隔', sub: '每隔多久', when: () => cfg.cont === 'say',
       opts: [[10, '10 秒'], [30, '30 秒'], [60, '1 分'], [300, '5 分'], [600, '10 分']] },
-    mix: { title: '與音樂同時播放', sub: '縮小後沒聲音時改用獨佔',
-      opts: [['mix', '混音'], ['solo', '獨佔']] },
+    mix: { title: '與音樂同時播放', sub: '被 Podcast 或音樂打斷時，換一種試試',
+      opts: [['ambient', '混音'], ['transient', '疊加'], ['playback', '獨佔']] },
   };
   const label = (k) => (O[k].opts.find(([v]) => v === cfg[k]) || [0, ''])[1];
 
@@ -441,11 +460,14 @@
   let fallbackQ = [];                              // events whose clips are unavailable: spoken by tick() via browser speech
 
   function applyAudioSession() {                   // transient plays on top of music/podcasts; playback takes the audio over
-    try { if (navigator.audioSession) navigator.audioSession.type = cfg.mix === 'mix' ? 'transient' : 'playback'; } catch {}
+    try { if (navigator.audioSession) navigator.audioSession.type = cfg.mix; } catch {}
   }
   function audioCtx() {
     try {
-      ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (!ctx) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        ctx.onstatechange = () => { if (ctx && ctx.state === 'running') showFix(false); };
+      }
       if (ctx.state !== 'running') ctx.resume();
     } catch {}
     return ctx;
@@ -484,8 +506,35 @@
       for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
       keepAlive = new Audio(URL.createObjectURL(new Blob([v], { type: 'audio/wav' })));
       keepAlive.loop = true; keepAlive.play().catch(() => {});
+      keepAlive.addEventListener('pause', () => { if (!document.hidden) recoverAudio(); });   // another app took the audio
     } catch {}
   }
+
+  /* ---------- Interruptions (a podcast starts, a call comes in, Siri...) ---------- */
+  const active = () => (st === 'run' || st === 'over') && !paused;
+  const showFix = (on) => $('fix').classList.toggle('show', on);
+  const drifted = (now) => base.wall && Math.abs(ctx.currentTime - (base.audio + (now - base.wall) / 1000)) > 0.4;
+  async function recoverAudio() {
+    if (!active()) return;
+    audioCtx();                                    // try to resume without a tap
+    if (keepAlive) keepAlive.play().catch(() => {});
+    await new Promise((ok) => setTimeout(ok, 400));
+    if (ctx && ctx.state === 'running') {
+      if (drifted(Date.now()) || !sources.size) { stopAll(); scheduleAhead(); }   // the audio clock stood still: rebuild the schedule
+      showFix(false);
+    } else showFix(true);                          // iOS may insist on a tap
+  }
+  $('fixBtn').onclick = async () => {
+    unlockAudio();                                 // inside the tap
+    await new Promise((ok) => setTimeout(ok, 250));
+    if (ctx && ctx.state !== 'running') {          // still stuck: start over with a fresh audio context
+      try { await ctx.close(); } catch {}
+      ctx = null; audioCtx();
+      await new Promise((ok) => setTimeout(ok, 250));
+    }
+    stopAll(); scheduleAhead();
+    showFix(!(ctx && ctx.state === 'running'));
+  };
   function speakFallback(text) {
     try {
       const synth = window.speechSynthesis;
@@ -603,6 +652,7 @@
   /* ---------- State ---------- */
   let st = 'idle';                 // idle | run | over | done
   let target = 0, total = 1, paused = false, pausedMs = 0;
+  let stuckSince = 0;
   let marks = [], overGen = 0;     // overGen = how many 「超過」 reports are already scheduled
 
   const runEvents = () => marks.map((m) => ({ at: target - m.t * 1000, p: markPhrase(m) }));
@@ -654,11 +704,14 @@
       setUI();
     }
     if ((st === 'run' || st === 'over') && !paused) {
-      // keep the audio clock honest: if it was suspended (call, Siri, app switch) the schedule has slipped
+      // keep the audio clock honest
       if (ctx) {
-        if (ctx.state !== 'running') ctx.resume();
-        else if (base.wall && now - base.wall > 5000 && Math.abs(ctx.currentTime - (base.audio + (now - base.wall) / 1000)) > 0.4 && sources.size) {
-          stopAll(); scheduleAhead();
+        if (ctx.state !== 'running') {
+          ctx.resume();
+          if (!document.hidden) { stuckSince ||= now; if (now - stuckSince > 1500) showFix(true); }
+        } else {
+          stuckSince = 0;
+          if (base.wall && now - base.wall > 5000 && sources.size && drifted(now)) { stopAll(); scheduleAhead(); }
         }
       }
       // refill 「超過」 reports while the page is in view
@@ -738,9 +791,12 @@
       } else if (!want && wake) { await wake.release(); wake = null; }
     } catch { wake = null; }
   }
+  window.addEventListener('pageshow', () => { if (!document.hidden) recoverAudio(); });
+  window.addEventListener('focus', () => recoverAudio());
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     syncWake();
+    recoverAudio();
     if (st === 'idle' && cfg.mode === 'clock' && !clockTouched) { clockToNow(); syncClock(); }
     tick();
   });
