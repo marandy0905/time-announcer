@@ -348,11 +348,9 @@
     stopMode: 'none',                          // after the target: never | after N seconds | at a clock time
     stopAfter: 1800, stopAt: '23:00',
     h24: '24',                                 // clock format: 24 | 12
-    mix: 'playback',                           // playback: keeps going in the background but pauses other audio | ambient: mixes, foreground only
   };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
   cfg.mode = 'dur';                                            // always open on 「倒數多久」
-  if (cfg.mixV !== 2) { cfg.mix = 'playback'; cfg.mixV = 2; }    // iOS only keeps playing in the background with 「playback」
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
 
   // Not persisted: the clock picker starts at now + 10 min, the duration starts empty.
@@ -381,9 +379,6 @@
       opts: [['none', '不停止'], ['after', '超過一段時間'], ['at', '到指定時間']] },
     stopAfter: { title: '超過多久後停止', sub: '', when: () => cfg.cont !== 'stop' && cfg.stopMode === 'after',
       opts: [[300, '5 分'], [600, '10 分'], [1800, '30 分'], [3600, '1小時'], [7200, '2小時']] },
-    mix: { title: '音訊模式', sub: '',
-      note: 'iOS 的限制：縮小或鎖定螢幕後還能報時，就一定會暫停其他 App 的音樂；想一邊聽音樂，App 就要留在前景。',
-      opts: [['playback', '背景報時'], ['ambient', '搭配音樂']] },
   };
   const label = (k) => (O[k].opts.find(([v]) => v === cfg[k]) || [0, ''])[1];
 
@@ -394,7 +389,7 @@
       const b = document.createElement('button');
       b.type = 'button'; b.textContent = text;
       b.setAttribute('aria-pressed', String(v === cfg[key]));
-      b.onclick = () => { cfg[key] = v; save(); if (key === 'mix') applyAudioSession(); renderOptions(); };
+      b.onclick = () => { cfg[key] = v; save(); renderOptions(); };
       return b;
     }));
   }
@@ -411,7 +406,7 @@
 
   // Order: per-second countdown first, then the (collapsed) report intervals, then the rest.
   const list = $('optList');
-  const simple = ['count', 'cont', 'overIv', 'stopMode', 'stopAfter', 'mix'].map(group);
+  const simple = ['count', 'cont', 'overIv', 'stopMode', 'stopAfter'].map(group);
   simple[2].g.classList.add('joined'); simple[3].g.classList.add('joined'); simple[4].g.classList.add('joined');
   const stopAtBox = document.createElement('div');
   stopAtBox.className = 'group joined';
@@ -439,7 +434,7 @@
     ivBox.querySelector('.disclose').setAttribute('aria-expanded', String(open));
     ivInner.inert = !open;
   };
-  list.append(simple[0].g, ivBox, simple[1].g, simple[2].g, simple[3].g, simple[4].g, stopAtBox, simple[5].g);
+  list.append(simple[0].g, ivBox, simple[1].g, simple[2].g, simple[3].g, simple[4].g, stopAtBox);
 
   function renderOptions() {
     simple.forEach(({ key, g, seg }) => {
@@ -560,8 +555,8 @@
   const loading = new Map();
   let fallbackQ = [];                              // events whose clips are unavailable: spoken by tick() via browser speech
 
-  function applyAudioSession() {                   // transient plays on top of music/podcasts; playback takes the audio over
-    try { if (navigator.audioSession) navigator.audioSession.type = cfg.mix; } catch {}
+  function applyAudioSession() {                   // 'playback' is the only session iOS keeps alive in the background
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
   }
   function audioCtx() {
     try {
