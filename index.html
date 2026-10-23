@@ -67,12 +67,14 @@
   .line { padding: 0.95rem 0; }
   .line + .line { border-top: 1px solid var(--track); }
   .line small { display: block; font-size: 0.8rem; font-weight: 500; color: var(--text-2); letter-spacing: 0.02em; }
-  .clock { display: block; font-size: 1.9rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .val { display: block; font-size: 1.9rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; transition: color 0.5s ease; }
+  /* the highlighted line: the difference in "countdown" mode, the target in "clock" mode */
   .line.hero { padding: 1.15rem 0 1.05rem; }
-  .line.hero .phase { color: var(--accent); font-weight: 600; font-size: 0.95rem; transition: color 0.5s ease; }
-  .time { display: block; font-size: clamp(3.2rem, 17vw, 4.6rem); font-weight: 600; line-height: 1.05; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--accent); transition: color 0.5s ease; }
-  .time.long { font-size: clamp(2.6rem, 13.5vw, 3.8rem); }
-  .note { display: block; font-size: 0.85rem; color: var(--text-2); min-height: 1.3em; margin-top: 0.1rem; }
+  .line.hero small { color: var(--accent); font-weight: 600; font-size: 0.95rem; transition: color 0.5s ease; }
+  .line.hero .val { font-size: clamp(3.2rem, 17vw, 4.6rem); line-height: 1.05; letter-spacing: -0.035em; color: var(--accent); }
+  .line.hero .val.long { font-size: clamp(2.6rem, 13.5vw, 3.8rem); }
+  .note { display: block; font-size: 0.85rem; color: var(--text-2); }
+  .line.hero .note { min-height: 1.3em; margin-top: 0.1rem; }
   .controls { display: flex; justify-content: center; gap: 0.75rem; margin-top: 0.7rem; }
   .btn {
     appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 1.05rem;
@@ -176,16 +178,16 @@
   <section class="card dial" aria-live="off">
     <div class="line">
       <small>現在時間</small>
-      <b class="clock" id="nowT">--:--:--</b>
+      <b class="val" id="nowT">--:--:--</b>
     </div>
-    <div class="line hero">
-      <small class="phase" id="phase">距離目標</small>
-      <b class="time" id="time">00:10:00</b>
+    <div class="line" id="lineDiff">
+      <small id="phase">距離目標</small>
+      <b class="val" id="time">00:10:00</b>
       <span class="note" id="note"> </span>
     </div>
-    <div class="line">
+    <div class="line" id="lineTgt">
       <small id="tgtLabel">目標時間</small>
-      <b class="clock" id="tgtT">--:--</b>
+      <b class="val" id="tgtT">--:--</b>
     </div>
     <div class="controls">
       <button class="btn" id="sec" hidden>結束</button>
@@ -626,8 +628,12 @@
 
   function render(R, tgt, now) {
     const dur = cfg.mode === 'dur';
-    setText(els.tgtT, (st === 'idle' && dur && !durTotal) ? '--:--:--' : dayLabel(tgt, now) + clockStr(new Date(tgt), dur));
-    setText(els.tgtLabel, '目標時間');
+    const emptyDur = st === 'idle' && dur && !durTotal;
+    setText(els.tgtT, emptyDur ? '--:--:--' : clockStr(new Date(tgt), dur));
+    const day = emptyDur ? '' : dayLabel(tgt, now).trim();
+    setText(els.tgtLabel, '目標時間' + (day ? ` · ${day}` : ''));
+    $('lineDiff').classList.toggle('hero', dur);      // countdown mode: the difference is the hero
+    $('lineTgt').classList.toggle('hero', !dur);      // clock mode: the target is
 
     let accent = 'idle', phase, timeStr, note = ' ';
     if (st === 'idle') {
@@ -646,6 +652,7 @@
     }
     setText(els.phase, phase); setText(els.time, timeStr); setText(els.note, note);
     els.time.classList.toggle('long', timeStr.length >= 7);
+    if (!dur) note = ' ';
     root.style.setProperty('--accent', { idle: 'var(--blue)', run: 'var(--green)', over: 'var(--orange)', done: 'var(--red)' }[accent]);
     els.main.disabled = st === 'idle' && dur && !durTotal;
   }
